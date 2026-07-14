@@ -184,6 +184,8 @@ importers:
         specifier: 1.56.1
         version: 1.56.1
 
+  extensions/cardiac-mapping: {}
+
   extensions/cornerstone:
     dependencies:
       '@babel/runtime':

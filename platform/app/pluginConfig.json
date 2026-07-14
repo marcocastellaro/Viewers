@@ -4,6 +4,9 @@
       "packageName": "@ohif/extension-default"
     },
     {
+      "packageName": "@cardiomap/extension-cardiac-mapping"
+    },
+    {
       "packageName": "@ohif/extension-cornerstone",
       "version": "3.0.0"
     },

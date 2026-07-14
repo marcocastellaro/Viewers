@@ -9,6 +9,7 @@ const extensionDependencies = {
   '@ohif/extension-cornerstone-dynamic-volume': '3.7.0-beta.76',
   '@ohif/extension-cornerstone-dicom-seg': '3.7.0-beta.76',
   '@ohif/extension-tmtv': '3.7.0-beta.76',
+  '@cardiomap/extension-cardiac-mapping': '0.1.0',
 };
 
 const ohif = {
@@ -124,10 +125,8 @@ function modeFactory({ modeConfiguration }) {
         }
       );
     },
-    onSetupRouteComplete: ({ servicesManager }: withAppTypes) => {
-      // This needs to run after hanging protocol matching process because
-      // it may change the protocol/stage based on workflow stage settings
-      initWorkflowSteps({ servicesManager });
+    onSetupRouteComplete: () => {
+      // CardioMap: niente workflow-steps PET (forzavano l'HP default4D). Usiamo il nostro HP.
     },
     onModeExit: ({ servicesManager }: withAppTypes) => {
       const {
@@ -197,8 +196,8 @@ function modeFactory({ modeConfiguration }) {
       },
     ],
     extensions: extensionDependencies,
-    // HP generico: carica la serie MR (T2* multi-echo -> 4D nativo). default4D era per PT/CT.
-    hangingProtocol: 'default',
+    // HP CardioMap: seleziona la serie T2* e la mostra come volume 4D.
+    hangingProtocol: 'cardiacMappingT2star',
     // Order is important in sop class handlers when two handlers both use
     // the same sop class under different situations.  In that case, the more
     // general handler needs to come last.  For this case, the dicomvideo must

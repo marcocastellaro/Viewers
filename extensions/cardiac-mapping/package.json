@@ -1,0 +1,12 @@
+{
+  "name": "@cardiomap/extension-cardiac-mapping",
+  "version": "0.1.0",
+  "description": "CardioMap: hanging protocol T2*, comando Analizza, pannelli",
+  "author": "CardioMap",
+  "license": "MIT",
+  "module": "src/index.tsx",
+  "main": "src/index.tsx",
+  "engines": {
+    "node": ">=24"
+  }
+}
