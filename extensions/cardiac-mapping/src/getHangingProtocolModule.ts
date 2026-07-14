@@ -65,7 +65,18 @@ const cardiacMappingT2star = {
             allowUnmatchedView: true,
             syncGroups: sync,
           },
-          displaySets: [{ id: 'mapSelector' }, { id: 'segSelector' }],
+          displaySets: [
+            {
+              id: 'mapSelector',
+              // mappa T2* a colori (hsv) con finestra fissa 0-80 ms; la colorbar (ms) viene
+              // aggiunta nell'onModeEnter del mode.
+              options: {
+                colormap: { name: 'hsv' },
+                voi: { windowCenter: 40, windowWidth: 80 },
+              },
+            },
+            { id: 'segSelector' },
+          ],
         },
       ],
     },

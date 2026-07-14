@@ -54,6 +54,8 @@ function modeFactory({ modeConfiguration }) {
         toolGroupService,
         customizationService,
         viewportGridService,
+        displaySetService,
+        colorbarService,
       } = servicesManager.services;
 
       const utilityModule = extensionManager.getModuleEntry(
@@ -119,8 +121,9 @@ function modeFactory({ modeConfiguration }) {
 
       // CardioMap: niente auto-play del cine (la navigazione echi resta manuale).
 
-      // Rendering senza interpolazione (nearest-neighbor): pixel netti sulle mappe/immagini.
-      const applyNearest = () => {
+      // Post-load: rendering nearest su tutti i viewport + colorbar (ms) sul viewport mappa.
+      const onViewportsReady = () => {
+        // 1) nessuna interpolazione (pixel netti)
         cornerstoneViewportService.getViewportIds().forEach(vpId => {
           const vp = cornerstoneViewportService.getCornerstoneViewport(vpId);
           try {
@@ -130,12 +133,31 @@ function modeFactory({ modeConfiguration }) {
             /* viewport non ancora pronto */
           }
         });
+        // 2) colorbar sul viewport che mostra la mappa T2* (SeriesDescription "CardioMap T2map")
+        try {
+          const { viewports } = viewportGridService.getState();
+          viewports.forEach((vp, vpId) => {
+            const uids = vp.displaySetInstanceUIDs || [];
+            const mapUID = uids.find(uid => {
+              const ds = displaySetService.getDisplaySetByUID(uid);
+              return ds && (ds.SeriesDescription || '').includes('CardioMap T2map');
+            });
+            if (mapUID && colorbarService && !colorbarService.hasColorbar(vpId)) {
+              commandsManager.run('toggleViewportColorbar', {
+                viewportId: vpId,
+                displaySetInstanceUIDs: [mapUID],
+              });
+            }
+          });
+        } catch (e) {
+          /* colorbar best-effort */
+        }
       };
       [
         cornerstoneViewportService.EVENTS.VIEWPORT_DATA_CHANGED,
         cornerstoneViewportService.EVENTS.VIEWPORT_VOLUMES_CHANGED,
       ].forEach(ev =>
-        cornerstoneViewportService.subscribe(ev, () => setTimeout(applyNearest, 50))
+        cornerstoneViewportService.subscribe(ev, () => setTimeout(onViewportsReady, 100))
       );
     },
     onSetupRouteComplete: () => {
@@ -191,8 +213,9 @@ function modeFactory({ modeConfiguration }) {
               // pannello PET dynamic-volume rimosso (crashava): lista serie standard
               leftPanels: [ohif.leftPanel],
               leftPanelResizable: true,
-              // pannelli CardioMap: bull's eye + voxel
+              // pannelli: segmentazione (opacita'/visibilita'), bull's eye, voxel
               rightPanels: [
+                '@ohif/extension-cornerstone.panelModule.panelSegmentation',
                 '@cardiomap/extension-cardiac-mapping.panelModule.cardiomapBullseye',
                 '@cardiomap/extension-cardiac-mapping.panelModule.cardiomapVoxel',
               ],
