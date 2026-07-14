@@ -33,10 +33,17 @@ const cardiacMappingT2star = {
       ],
     },
     mapSelector: {
-      // la mappa T2* (serie immagine grayscale reinviata dal write-back).
+      // BASE: mappa T2* completa in grayscale ("CardioMap T2map full").
       seriesMatchingRules: [
         { attribute: 'Modality', constraint: { equals: 'MR' }, required: true },
-        { attribute: 'SeriesDescription', constraint: { contains: 'CardioMap T2map' }, required: true },
+        { attribute: 'SeriesDescription', constraint: { contains: 'T2map full' }, required: true },
+      ],
+    },
+    myoMapSelector: {
+      // OVERLAY colore: mappa T2* del solo miocardio ("CardioMap T2map myo").
+      seriesMatchingRules: [
+        { attribute: 'Modality', constraint: { equals: 'MR' }, required: true },
+        { attribute: 'SeriesDescription', constraint: { contains: 'T2map myo' }, required: true },
       ],
     },
   },
@@ -66,16 +73,29 @@ const cardiacMappingT2star = {
             syncGroups: sync,
           },
           displaySets: [
+            // LAYER 1 (base): mappa T2* completa in scala di grigi
             {
               id: 'mapSelector',
-              // mappa T2* a colori: la mappa e' mascherata al miocardio (write-back), quindi
-              // col colormap a basso scuro (inferno) il fuori-miocardio resta nero.
-              // Finestra fissa 0-80 ms; la colorbar (ms) e' aggiunta nell'onModeEnter.
+              options: { voi: { windowCenter: 40, windowWidth: 80 } },
+            },
+            // LAYER 2 (foreground): mappa del miocardio a colori (inferno), trasparente fuori
+            // grazie alla rampa di opacita' (value 0 -> opacity 0).
+            {
+              id: 'myoMapSelector',
               options: {
-                colormap: { name: 'Inferno (matplotlib)' },
                 voi: { windowCenter: 40, windowWidth: 80 },
+                colormap: {
+                  name: 'Inferno (matplotlib)',
+                  opacity: [
+                    { value: 0, opacity: 0 },
+                    { value: 0.02, opacity: 1 },
+                    { value: 1, opacity: 1 },
+                  ],
+                },
               },
             },
+            // LAYER 3: segmentazione (opacita' regolabile dal pannello Segmentations)
+            { id: 'segSelector' },
           ],
         },
       ],

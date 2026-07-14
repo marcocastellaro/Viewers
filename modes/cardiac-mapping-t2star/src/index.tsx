@@ -58,17 +58,7 @@ function modeFactory({ modeConfiguration }) {
         colorbarService,
         segmentationService,
       } = servicesManager.services;
-
-      // Opacita' bassa di default per la segmentazione (Labelmap): cosi' si vede la mappa
-      // T2* a colori sotto. Resta regolabile dal pannello Segmentations.
-      try {
-        segmentationService.setStyle(
-          { type: 'Labelmap' },
-          { fillAlpha: 0.25, fillAlphaInactive: 0.25 }
-        );
-      } catch (e) {
-        /* stile best-effort */
-      }
+      void segmentationService;
 
       const utilityModule = extensionManager.getModuleEntry(
         '@ohif/extension-cornerstone.utilityModule.tools'
@@ -152,7 +142,7 @@ function modeFactory({ modeConfiguration }) {
             const uids = vp.displaySetInstanceUIDs || [];
             const mapUID = uids.find(uid => {
               const ds = displaySetService.getDisplaySetByUID(uid);
-              return ds && (ds.SeriesDescription || '').includes('CardioMap T2map');
+              return ds && (ds.SeriesDescription || '').includes('T2map myo');
             });
             if (mapUID && colorbarService && !colorbarService.hasColorbar(vpId)) {
               commandsManager.run('toggleViewportColorbar', {
