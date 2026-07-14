@@ -30,6 +30,10 @@ const cornerstone = {
   activeViewportWindowLevel: '@ohif/extension-cornerstone.panelModule.activeViewportWindowLevel',
 };
 
+const dicomSeg = {
+  sopClassHandler: '@ohif/extension-cornerstone-dicom-seg.sopClassHandlerModule.dicom-seg',
+};
+
 function modeFactory({ modeConfiguration }) {
   return {
     id,
@@ -107,23 +111,7 @@ function modeFactory({ modeConfiguration }) {
         },
       });
 
-      // Auto play the clip initially when the volumes are loaded
-      const { unsubscribe } = cornerstoneViewportService.subscribe(
-        cornerstoneViewportService.EVENTS.VIEWPORT_VOLUMES_CHANGED,
-        () => {
-          const viewportId = viewportGridService.getActiveViewportId();
-
-          if (!viewportId) {
-            return;
-          }
-
-          const frameRate = 24;
-          cineService.setIsCineEnabled(true);
-          cineService.setCine({ id: viewportId, isPlaying: true, frameRate });
-
-          unsubscribe();
-        }
-      );
+      // CardioMap: niente auto-play del cine (la navigazione echi resta manuale).
     },
     onSetupRouteComplete: () => {
       // CardioMap: niente workflow-steps PET (forzavano l'HP default4D). Usiamo il nostro HP.
@@ -190,6 +178,10 @@ function modeFactory({ modeConfiguration }) {
                   namespace: cornerstone.viewport,
                   displaySetsToDisplay: [ohif.defaultSopClassHandler],
                 },
+                {
+                  namespace: cornerstone.viewport,
+                  displaySetsToDisplay: [dicomSeg.sopClassHandler, ohif.defaultSopClassHandler],
+                },
               ],
             },
           };
@@ -203,7 +195,11 @@ function modeFactory({ modeConfiguration }) {
     // the same sop class under different situations.  In that case, the more
     // general handler needs to come last.  For this case, the dicomvideo must
     // come first to remove video transfer syntax before ohif uses images
-    sopClassHandlers: [ohif.chartSopClassHandler, ohif.defaultSopClassHandler],
+    sopClassHandlers: [
+      ohif.chartSopClassHandler,
+      dicomSeg.sopClassHandler,
+      ohif.defaultSopClassHandler,
+    ],
   };
 }
 
