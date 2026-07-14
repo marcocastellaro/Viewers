@@ -68,14 +68,14 @@ const cardiacMappingT2star = {
           displaySets: [
             {
               id: 'mapSelector',
-              // mappa T2* a colori (hsv) con finestra fissa 0-80 ms; la colorbar (ms) viene
-              // aggiunta nell'onModeEnter del mode.
+              // mappa T2* a colori: la mappa e' mascherata al miocardio (write-back), quindi
+              // col colormap a basso scuro (inferno) il fuori-miocardio resta nero.
+              // Finestra fissa 0-80 ms; la colorbar (ms) e' aggiunta nell'onModeEnter.
               options: {
-                colormap: { name: 'hsv' },
+                colormap: { name: 'Inferno (matplotlib)' },
                 voi: { windowCenter: 40, windowWidth: 80 },
               },
             },
-            { id: 'segSelector' },
           ],
         },
       ],

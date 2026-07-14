@@ -56,7 +56,19 @@ function modeFactory({ modeConfiguration }) {
         viewportGridService,
         displaySetService,
         colorbarService,
+        segmentationService,
       } = servicesManager.services;
+
+      // Opacita' bassa di default per la segmentazione (Labelmap): cosi' si vede la mappa
+      // T2* a colori sotto. Resta regolabile dal pannello Segmentations.
+      try {
+        segmentationService.setStyle(
+          { type: 'Labelmap' },
+          { fillAlpha: 0.25, fillAlphaInactive: 0.25 }
+        );
+      } catch (e) {
+        /* stile best-effort */
+      }
 
       const utilityModule = extensionManager.getModuleEntry(
         '@ohif/extension-cornerstone.utilityModule.tools'
