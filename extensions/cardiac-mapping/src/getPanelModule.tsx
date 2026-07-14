@@ -16,7 +16,7 @@ function getPanelModule() {
       iconName: 'tab-patient-info',
       iconLabel: 'Voxel',
       label: 'Voxel T2*',
-      component: () => <VoxelPanel />,
+      component: (props: any) => <VoxelPanel {...props} />,
     },
   ];
 }
