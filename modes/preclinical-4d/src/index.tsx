@@ -148,12 +148,11 @@ function modeFactory({ modeConfiguration }) {
         series: [],
       };
     },
-    isValidMode: ({ modalities }) => {
-      // CardioMap: disponibile per studi 4D (multi-echo MR come T2*, o PET dinamico).
-      const list = (modalities || '').split('\\');
+    isValidMode: ({ modalities, study }) => {
+      // Todo: we need to find a better way to validate the mode
       return {
-        valid: list.includes('MR') || list.includes('PT'),
-        description: 'Disponibile per studi 4D (multi-echo MR / PET dinamico).',
+        valid: study.mrn === 'M1',
+        description: 'This mode is only available for 4D PET/CT studies.',
       };
     },
 
