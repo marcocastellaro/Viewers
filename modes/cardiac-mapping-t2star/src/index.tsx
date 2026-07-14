@@ -125,11 +125,22 @@ function modeFactory({ modeConfiguration }) {
 
       // Post-load: rendering nearest su tutti i viewport + colorbar (ms) sul viewport mappa.
       const onViewportsReady = () => {
-        // 1) nessuna interpolazione (pixel netti)
+        // 1) nessuna interpolazione (pixel netti) su TUTTI i volumi del viewport
+        //    (base + overlay colore): setProperties senza volumeId tocca solo il primo,
+        //    quindi iteriamo gli actor e impostiamo NEAREST per ciascun volumeId.
         cornerstoneViewportService.getViewportIds().forEach(vpId => {
           const vp = cornerstoneViewportService.getCornerstoneViewport(vpId);
           try {
-            vp?.setProperties?.({ interpolationType: csEnums.InterpolationType.NEAREST });
+            const volumeIds = (vp?.getActors?.() || [])
+              .map(a => a.uid)
+              .filter(Boolean);
+            if (volumeIds.length) {
+              volumeIds.forEach(volId =>
+                vp.setProperties({ interpolationType: csEnums.InterpolationType.NEAREST }, volId)
+              );
+            } else {
+              vp?.setProperties?.({ interpolationType: csEnums.InterpolationType.NEAREST });
+            }
             vp?.render?.();
           } catch (e) {
             /* viewport non ancora pronto */
