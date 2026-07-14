@@ -6,9 +6,10 @@
 // I due viewport sono sincronizzati (posizione camera + window level).
 // Mappa e SEG compaiono dopo l'analisi (write-back); se assenti, il viewport destro e' vuoto.
 
+// Solo sync spaziale (camera): scroll/zoom/pan condivisi fra i due viewport.
+// NIENTE sync 'voi' -> brightness/contrasto (window/level) indipendenti per viewport.
 const sync = [
   { type: 'cameraPosition', id: 'cardiacCamera', source: true, target: true },
-  { type: 'voi', id: 'cardiacVOI', source: true, target: true },
 ];
 
 const cardiacMappingT2star = {

@@ -1,5 +1,7 @@
 const toolGroupIds = {
-  default: 'dynamic4D-default',
+  // deve combaciare con toolGroupId dei viewport nell'hanging protocol ('default'),
+  // altrimenti i viewport non hanno tool attivi (niente rotella, niente W/L col mouse).
+  default: 'default',
   PT: 'dynamic4D-pt',
   Fusion: 'dynamic4D-fusion',
   CT: 'dynamic4D-ct',

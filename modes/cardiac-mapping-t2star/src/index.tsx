@@ -1,3 +1,4 @@
+import { Enums as csEnums } from '@cornerstonejs/core';
 import { id } from './id';
 import initWorkflowSteps from './initWorkflowSteps';
 import initToolGroups from './initToolGroups';
@@ -117,6 +118,25 @@ function modeFactory({ modeConfiguration }) {
       });
 
       // CardioMap: niente auto-play del cine (la navigazione echi resta manuale).
+
+      // Rendering senza interpolazione (nearest-neighbor): pixel netti sulle mappe/immagini.
+      const applyNearest = () => {
+        cornerstoneViewportService.getViewportIds().forEach(vpId => {
+          const vp = cornerstoneViewportService.getCornerstoneViewport(vpId);
+          try {
+            vp?.setProperties?.({ interpolationType: csEnums.InterpolationType.NEAREST });
+            vp?.render?.();
+          } catch (e) {
+            /* viewport non ancora pronto */
+          }
+        });
+      };
+      [
+        cornerstoneViewportService.EVENTS.VIEWPORT_DATA_CHANGED,
+        cornerstoneViewportService.EVENTS.VIEWPORT_VOLUMES_CHANGED,
+      ].forEach(ev =>
+        cornerstoneViewportService.subscribe(ev, () => setTimeout(applyNearest, 50))
+      );
     },
     onSetupRouteComplete: () => {
       // CardioMap: niente workflow-steps PET (forzavano l'HP default4D). Usiamo il nostro HP.
