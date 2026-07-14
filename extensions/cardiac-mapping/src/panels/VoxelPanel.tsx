@@ -1,13 +1,13 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { metaData, imageLoader, utilities as csUtils, eventTarget } from '@cornerstonejs/core';
-import { Enums as csToolsEnums, ToolGroupManager } from '@cornerstonejs/tools';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSystem } from '@ohif/core/src';
 
 // Pannello "fit 4D delle ROI": clic (Punto/ROI) sul viewport -> legge il segnale dei 10 echi
 // dal volume T2* multi-echo, fitta mono-esponenziale (log-lineare pesato S^2) e mostra
 // curva + T2*(ms) e CV%. Tutto client-side: nessun roundtrip, legge le immagini gia' in cache.
-
-const TOOL_GROUP_ID = 'default'; // combacia con initToolGroups
-const PRIMARY = 1; // MouseBindings.Primary
+//
+// IMPORTANTE: usa le istanze cornerstone CONDIVISE esposte da @ohif/extension-cornerstone
+// (getCornerstoneLibraries). Importare '@cornerstonejs/*' direttamente qui crea istanze
+// duplicate -> il tool non si attiva e gli eventi (eventTarget) non arrivano.
 
 type Slice = { id: string; te: number; ipp: number[]; iop: number[]; rows: number; cols: number; d: number };
 type Fit = { t2star: number; s0: number; cv: number; n: number };
@@ -31,9 +31,9 @@ function findT2starDisplaySet(displaySetService: any) {
   );
 }
 
-function echoMetas(ds: any): Slice[] {
+function echoMetas(ds: any, metaData: any): Slice[] {
   const ids: string[] = ds?.imageIds || (ds?.images || []).map((i: any) => i.imageId);
-  const metas = (ids || [])
+  return (ids || [])
     .map((id: string) => {
       const inst: any = metaData.get('instance', id) || {};
       return {
@@ -47,12 +47,11 @@ function echoMetas(ds: any): Slice[] {
       } as Slice;
     })
     .filter(m => m.ipp.length === 3 && m.iop.length === 6 && isFinite(m.te));
-  return metas;
 }
 
 // Seleziona la slice (10 echi) piu' vicina al punto mondo; ritorna gli echi ordinati per TE.
 function pickSlice(metas: Slice[], world: number[]): Slice[] | null {
-  if (!metas.length) return null;
+  if (!metas.length || !world) return null;
   const iop = metas[0].iop;
   const n = cross(iop.slice(0, 3), iop.slice(3, 6));
   metas.forEach(m => (m.d = dot(m.ipp, n)));
@@ -108,14 +107,14 @@ function fitT2star(te: number[], sig: number[]): Fit | null {
   return { t2star, s0, cv, n: xs.length };
 }
 
-async function readProbe(ds: any, world: number[]): Promise<Sample | null> {
-  const slice = pickSlice(echoMetas(ds), world);
+async function readProbe(ds: any, world: number[], cs: any): Promise<Sample | null> {
+  const slice = pickSlice(echoMetas(ds, cs.metaData), world);
   if (!slice) return null;
-  const [cx, cy] = csUtils.worldToImageCoords(slice[0].id, world) as number[];
+  const [cx, cy] = cs.utilities.worldToImageCoords(slice[0].id, world) as number[];
   const col = Math.round(cx);
   const row = Math.round(cy);
   if (col < 0 || row < 0 || col >= slice[0].cols || row >= slice[0].rows) return null;
-  const imgs = await Promise.all(slice.map(m => imageLoader.loadAndCacheImage(m.id)));
+  const imgs = await Promise.all(slice.map(m => cs.imageLoader.loadAndCacheImage(m.id)));
   const te: number[] = [];
   const sig: number[] = [];
   imgs.forEach((img: any, k: number) => {
@@ -126,18 +125,17 @@ async function readProbe(ds: any, world: number[]): Promise<Sample | null> {
   return { te, sig, fit: fitT2star(te, sig), where: `voxel (${col}, ${row})` };
 }
 
-async function readRoi(ds: any, ann: any): Promise<Sample | null> {
+async function readRoi(ds: any, ann: any, cs: any): Promise<Sample | null> {
   const pts: number[][] = ann?.data?.handles?.points || [];
   if (pts.length < 3) return null;
   const center = [0, 1, 2].map(k => pts.reduce((s, p) => s + p[k], 0) / pts.length);
-  const slice = pickSlice(echoMetas(ds), center);
+  const slice = pickSlice(echoMetas(ds, cs.metaData), center);
   if (!slice) return null;
   const id0 = slice[0].id;
-  // centro e semiassi in coordinate immagine (pixel)
-  const [ccx, ccy] = csUtils.worldToImageCoords(id0, center) as number[];
+  const [ccx, ccy] = cs.utilities.worldToImageCoords(id0, center) as number[];
   let ax = 1, ay = 1;
   pts.forEach(p => {
-    const [px, py] = csUtils.worldToImageCoords(id0, p) as number[];
+    const [px, py] = cs.utilities.worldToImageCoords(id0, p) as number[];
     ax = Math.max(ax, Math.abs(px - ccx));
     ay = Math.max(ay, Math.abs(py - ccy));
   });
@@ -147,7 +145,7 @@ async function readRoi(ds: any, ann: any): Promise<Sample | null> {
   const x1 = Math.min(cols - 1, Math.ceil(ccx + ax));
   const y0 = Math.max(0, Math.floor(ccy - ay));
   const y1 = Math.min(rows - 1, Math.ceil(ccy + ay));
-  const imgs = await Promise.all(slice.map(m => imageLoader.loadAndCacheImage(m.id)));
+  const imgs = await Promise.all(slice.map(m => cs.imageLoader.loadAndCacheImage(m.id)));
   const te: number[] = [];
   const sig: number[] = [];
   let nPix = 0;
@@ -202,25 +200,36 @@ function DecayPlot({ sample }: { sample: Sample }) {
   );
 }
 
-export default function VoxelPanel({ servicesManager }: { servicesManager?: any }) {
+export default function VoxelPanel() {
+  const { servicesManager, commandsManager, extensionManager } = useSystem();
   const displaySetService = servicesManager?.services?.displaySetService;
+
+  // istanze cornerstone CONDIVISE con OHIF (stesso eventTarget/registry dei tool)
+  const cs = useMemo(() => {
+    try {
+      const mod = extensionManager.getModuleEntry(
+        '@ohif/extension-cornerstone.utilityModule.common'
+      );
+      const { cornerstone, cornerstoneTools } = mod.exports.getCornerstoneLibraries();
+      return { cornerstone, cornerstoneTools };
+    } catch (e) {
+      return null;
+    }
+  }, [extensionManager]);
+
   const [mode, setMode] = useState<'off' | 'Probe' | 'EllipticalROI'>('off');
   const [sample, setSample] = useState<Sample | null>(null);
   const [status, setStatus] = useState<string>('');
-  const modeRef = useRef(mode);
-  modeRef.current = mode;
 
-  const setActiveTool = useCallback((tool: 'WindowLevel' | 'Probe' | 'EllipticalROI') => {
-    const tg = ToolGroupManager.getToolGroup(TOOL_GROUP_ID);
-    if (!tg) {
-      setStatus('tool group non pronto');
-      return;
-    }
-    ['WindowLevel', 'Probe', 'EllipticalROI'].forEach(t => {
-      try { tg.setToolPassive(t); } catch (e) { /* */ }
-    });
-    tg.setToolActive(tool, { bindings: [{ mouseButton: PRIMARY }] });
-  }, []);
+  const setActiveTool = useCallback(
+    (tool: 'WindowLevel' | 'Probe' | 'EllipticalROI') => {
+      const { toolGroupService, viewportGridService } = servicesManager.services;
+      const { activeViewportId } = viewportGridService.getState();
+      const tg = toolGroupService.getToolGroupForViewport(activeViewportId);
+      commandsManager.run('setToolActive', { toolName: tool, toolGroupId: tg?.id });
+    },
+    [commandsManager, servicesManager]
+  );
 
   const toggle = useCallback(
     (tool: 'Probe' | 'EllipticalROI') => {
@@ -238,17 +247,19 @@ export default function VoxelPanel({ servicesManager }: { servicesManager?: any 
   );
 
   useEffect(() => {
+    if (!cs) return;
+    const eventTarget = cs.cornerstone.eventTarget;
+    const EVT = cs.cornerstoneTools.Enums.Events.ANNOTATION_COMPLETED;
     const handler = async (evt: any) => {
       const ann = evt?.detail?.annotation;
       const name = ann?.metadata?.toolName;
       if (!ann || (name !== 'Probe' && name !== 'EllipticalROI')) return;
-      if (!displaySetService) return;
       const ds = findT2starDisplaySet(displaySetService);
       if (!ds) { setStatus('serie T2* multi-echo non trovata'); return; }
       try {
         const r = name === 'Probe'
-          ? await readProbe(ds, ann.data?.handles?.points?.[0])
-          : await readRoi(ds, ann);
+          ? await readProbe(ds, ann.data?.handles?.points?.[0], cs.cornerstone)
+          : await readRoi(ds, ann, cs.cornerstone);
         if (!r) { setStatus('punto fuori dalla mappa'); return; }
         setSample(r);
         setStatus('');
@@ -256,9 +267,9 @@ export default function VoxelPanel({ servicesManager }: { servicesManager?: any 
         setStatus('errore lettura: ' + (e?.message || e));
       }
     };
-    eventTarget.addEventListener(csToolsEnums.Events.ANNOTATION_COMPLETED, handler);
-    return () => eventTarget.removeEventListener(csToolsEnums.Events.ANNOTATION_COMPLETED, handler);
-  }, [displaySetService]);
+    eventTarget.addEventListener(EVT, handler);
+    return () => eventTarget.removeEventListener(EVT, handler);
+  }, [cs, displaySetService]);
 
   const btn = (active: boolean) => ({
     flex: 1, padding: '8px', border: 'none', borderRadius: 6, cursor: 'pointer',
