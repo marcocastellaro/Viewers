@@ -1,5 +1,6 @@
 import { id } from './id';
 import getHangingProtocolModule from './getHangingProtocolModule';
+import getPanelModule from './getPanelModule';
 
 // Comando nativo "Analizza T2*": chiama l'orchestrator (/api), sostituira' il widget iniettato.
 function makeAnalyzeCommand(servicesManager) {
@@ -57,6 +58,7 @@ function makeAnalyzeCommand(servicesManager) {
 const cardiacMappingExtension = {
   id,
   getHangingProtocolModule,
+  getPanelModule,
   getCommandsModule({ servicesManager }: withAppTypes) {
     return {
       definitions: {

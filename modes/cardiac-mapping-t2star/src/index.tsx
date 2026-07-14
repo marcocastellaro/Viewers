@@ -175,19 +175,20 @@ function modeFactory({ modeConfiguration }) {
           return {
             id: ohif.layout,
             props: {
-              leftPanels: [[dynamicVolume.leftPanel, cornerstone.activeViewportWindowLevel]],
+              // pannello PET dynamic-volume rimosso (crashava): lista serie standard
+              leftPanels: [ohif.leftPanel],
               leftPanelResizable: true,
-              rightPanels: [],
+              // pannelli CardioMap: bull's eye + voxel
+              rightPanels: [
+                '@cardiomap/extension-cardiac-mapping.panelModule.cardiomapBullseye',
+                '@cardiomap/extension-cardiac-mapping.panelModule.cardiomapVoxel',
+              ],
               rightPanelResizable: true,
-              rightPanelClosed: true,
+              rightPanelClosed: false,
               viewports: [
                 {
                   namespace: cornerstone.viewport,
                   displaySetsToDisplay: [ohif.defaultSopClassHandler],
-                },
-                {
-                  namespace: ohif.chartViewport,
-                  displaySetsToDisplay: [ohif.chartSopClassHandler],
                 },
               ],
             },
