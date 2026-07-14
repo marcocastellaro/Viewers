@@ -8,6 +8,7 @@ const extensionDependencies = {
   '@ohif/extension-cornerstone': '3.7.0-beta.76',
   '@ohif/extension-cornerstone-dynamic-volume': '3.7.0-beta.76',
   '@ohif/extension-cornerstone-dicom-seg': '3.7.0-beta.76',
+  '@ohif/extension-cornerstone-dicom-pmap': '3.7.0-beta.76',
   '@ohif/extension-tmtv': '3.7.0-beta.76',
   '@cardiomap/extension-cardiac-mapping': '0.1.0',
 };
@@ -32,6 +33,10 @@ const cornerstone = {
 
 const dicomSeg = {
   sopClassHandler: '@ohif/extension-cornerstone-dicom-seg.sopClassHandlerModule.dicom-seg',
+};
+
+const dicomPmap = {
+  sopClassHandler: '@ohif/extension-cornerstone-dicom-pmap.sopClassHandlerModule.dicom-pmap',
 };
 
 function modeFactory({ modeConfiguration }) {
@@ -197,6 +202,7 @@ function modeFactory({ modeConfiguration }) {
     // come first to remove video transfer syntax before ohif uses images
     sopClassHandlers: [
       ohif.chartSopClassHandler,
+      dicomPmap.sopClassHandler,
       dicomSeg.sopClassHandler,
       ohif.defaultSopClassHandler,
     ],
