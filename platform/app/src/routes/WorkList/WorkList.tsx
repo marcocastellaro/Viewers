@@ -15,6 +15,7 @@ import {
 } from '@ohif/ui-next';
 import { StudyListSettingsPopover } from './StudyListSettingsPopover';
 import { SidePanelPreview } from './SidePanelPreview';
+import DeleteStudyButton from './DeleteStudyButton';
 
 type Props = withAppTypes & {
   data: any[];
@@ -162,7 +163,12 @@ export default function WorkList({
               onStudyDoubleClick={studyDoubleClickCommand ? onStudyDoubleClick : undefined}
               onSelectionChange={sel => setSelected((sel as StudyRow[])[0] ?? null)}
               toolbarLeftComponent={logoComponent}
-              toolbarRightActionsComponent={toolbarActions}
+              toolbarRightActionsComponent={
+                <div className="flex items-center gap-2">
+                  <DeleteStudyButton study={selected} onDeleted={onRefresh} />
+                  {toolbarActions}
+                </div>
+              }
               toolbarRightComponent={
                 !isPreviewOpen ? (
                   <div className="relative -top-px mt-1 ml-2 flex items-center gap-1">
