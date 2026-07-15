@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { analysisTracker } from '../analysisTracker';
 
 function studyUID(): string | null {
   const u = new URL(window.location.href);
@@ -44,55 +45,44 @@ function ProgressSteps({ stage, running }: { stage: string; running: boolean }) 
   );
 }
 
-// Pannello Analisi: pulsante "Analizza T2*" + indicatore passivo di avanzamento della pipeline.
+// Pannello Analisi: pulsante "Analizza T2*" + indicatore avanzamento pipeline.
+// Lo stato dell'analisi vive nel tracker condiviso (analysisTracker): non si perde cambiando
+// pannello e riprende un job in corso al rientro.
 export default function BullseyePanel() {
   const uid = studyUID();
   const [status, setStatus] = useState<string>('');
-  const [stage, setStage] = useState<string>('');
-  const [running, setRunning] = useState<boolean>(false);
   const [hasAnalysis, setHasAnalysis] = useState<boolean>(false);
+  const [, force] = useState(0);
 
-  // "Analisi disponibile" = presenza dei risultati in ORTHANC (SR statistiche), non su disco.
-  const loadLatest = useCallback(() => {
-    if (!uid) return;
-    fetch(`/api/studies/${uid}/segments`)
-      .then(r => {
-        if (r.ok) { setHasAnalysis(true); setStage('done'); }
-      })
-      .catch(() => {});
+  // stato corrente dal tracker (solo se relativo a QUESTO studio)
+  const ts = analysisTracker.getState();
+  const running = ts.running && ts.study === uid;
+  const stage = ts.study === uid ? ts.stage : '';
+
+  useEffect(() => {
+    const unsub = analysisTracker.subscribe(() => force(n => n + 1));
+    if (uid) analysisTracker.resume(uid); // riprende un job in corso (dopo cambio tab/reload)
+    return unsub;
   }, [uid]);
 
-  useEffect(() => { loadLatest(); }, [loadLatest]);
-
-  const poll = useCallback((id: string) => {
-    fetch(`/api/jobs/${id}`)
-      .then(r => r.json())
-      .then(j => {
-        setStage(j.stage || '');
-        if (j.status === 'done') {
-          setStatus(''); setStage('done'); setRunning(false); setHasAnalysis(true);
-        } else if (j.status === 'error') {
-          setStatus('errore: ' + (j.error || 'sconosciuto')); setRunning(false);
-        } else {
-          setStatus('analisi: ' + (j.stage || j.status));
-          setTimeout(() => poll(id), 1500);
-        }
-      })
-      .catch(e => { setStatus('errore rete: ' + e); setRunning(false); });
-  }, []);
+  // "Analisi disponibile" = risultati in ORTHANC (SR statistiche), non su disco.
+  useEffect(() => {
+    if (!uid) return;
+    fetch(`/api/studies/${uid}/segments`).then(r => { if (r.ok) setHasAnalysis(true); }).catch(() => {});
+  }, [uid, stage]); // ricontrolla quando lo stage cambia (es. -> done)
 
   const analyze = useCallback(() => {
     if (!uid) { setStatus('nessuno studio aperto'); return; }
-    setStatus('avvio…'); setRunning(true); setStage('download');
+    setStatus('');
     fetch('/api/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ study_instance_uid: uid }),
     })
       .then(r => r.json())
-      .then(j => (j.job_id ? poll(j.job_id) : (setStatus('risposta inattesa'), setRunning(false))))
-      .catch(e => { setStatus('errore: ' + e); setRunning(false); });
-  }, [uid, poll]);
+      .then(j => (j.job_id ? analysisTracker.start(uid, j.job_id) : setStatus('risposta inattesa')))
+      .catch(e => setStatus('errore: ' + e));
+  }, [uid]);
 
   return (
     <div style={{ padding: 10, color: '#e0e0e0', fontFamily: 'sans-serif', fontSize: 12 }}>

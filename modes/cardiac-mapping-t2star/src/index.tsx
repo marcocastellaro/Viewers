@@ -57,6 +57,7 @@ function modeFactory({ modeConfiguration }) {
         displaySetService,
         colorbarService,
         segmentationService,
+        uiNotificationService,
       } = servicesManager.services;
 
       const utilityModule = extensionManager.getModuleEntry(
@@ -192,6 +193,25 @@ function modeFactory({ modeConfiguration }) {
       ].forEach(ev =>
         cornerstoneViewportService.subscribe(ev, () => setTimeout(onViewportsReady, 100))
       );
+
+      // A fine analisi ricarica la vista, cosi' l'hanging protocol carica le serie appena
+      // create in Orthanc (mappe + SEG). Il reload e' affidabile; i risultati (bull's eye,
+      // tabella, referto) restano perche' sono in Orthanc. Notifica breve prima del reload.
+      const onAnalysisDone = () => {
+        try {
+          uiNotificationService?.show?.({
+            title: 'Cardiac Mapping',
+            message: 'Analisi completata: aggiorno la vista…',
+            type: 'success',
+            duration: 2500,
+          });
+        } catch (e) { /* */ }
+        setTimeout(() => {
+          try { window.location.reload(); } catch (e) { /* */ }
+        }, 1500);
+      };
+      window.addEventListener('cardiomap:analysis-done', onAnalysisDone);
+      (servicesManager as any)._cardiomapOnDone = onAnalysisDone; // per rimozione in onModeExit
     },
     onSetupRouteComplete: () => {
       // CardioMap: niente workflow-steps PET (forzavano l'HP default4D). Usiamo il nostro HP.
@@ -203,6 +223,11 @@ function modeFactory({ modeConfiguration }) {
         segmentationService,
         cornerstoneViewportService,
       } = servicesManager.services;
+
+      const onDone = (servicesManager as any)._cardiomapOnDone;
+      if (onDone) {
+        window.removeEventListener('cardiomap:analysis-done', onDone);
+      }
 
       toolGroupService.destroy();
       syncGroupService.destroy();
