@@ -76,12 +76,15 @@ function modeFactory({ modeConfiguration }) {
         /* stile best-effort */
       }
 
+
       measurementService.clearMeasurements();
       initToolGroups({ toolNames, Enums, toolGroupService, commandsManager, servicesManager });
 
       toolbarService.register(toolbarButtons);
 
-      toolbarService.updateSection(toolbarService.sections.secondary, ['ProgressDropdown']);
+      // niente ProgressDropdown (navigazione manuale): il progresso pipeline e' passivo,
+      // mostrato nel pannello Analisi.
+      toolbarService.updateSection(toolbarService.sections.secondary, []);
 
       toolbarService.updateSection(toolbarService.sections.viewportActionMenu.topLeft, [
         'orientationMenu',
