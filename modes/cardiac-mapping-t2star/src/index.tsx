@@ -58,13 +58,23 @@ function modeFactory({ modeConfiguration }) {
         colorbarService,
         segmentationService,
       } = servicesManager.services;
-      void segmentationService;
 
       const utilityModule = extensionManager.getModuleEntry(
         '@ohif/extension-cornerstone.utilityModule.tools'
       );
 
       const { toolNames, Enums } = utilityModule.exports;
+
+      // Segmentazione: solo riempimento, NIENTE contorno (evita il "doppio cerchio" col bordo
+      // della mappa miocardio). Stile di default per tutti i labelmap del mode.
+      try {
+        segmentationService.setStyle(
+          { type: Enums.SegmentationRepresentations.Labelmap },
+          { renderOutline: false, renderOutlineInactive: false }
+        );
+      } catch (e) {
+        /* stile best-effort */
+      }
 
       measurementService.clearMeasurements();
       initToolGroups({ toolNames, Enums, toolGroupService, commandsManager, servicesManager });
