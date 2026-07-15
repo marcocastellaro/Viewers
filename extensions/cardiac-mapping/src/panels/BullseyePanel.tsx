@@ -47,22 +47,17 @@ function ProgressSteps({ stage, running }: { stage: string; running: boolean }) 
 // Pannello Analisi: pulsante "Analizza T2*" + indicatore passivo di avanzamento della pipeline.
 export default function BullseyePanel() {
   const uid = studyUID();
-  const [jobId, setJobId] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
-  const [ts, setTs] = useState<number>(Date.now());
   const [stage, setStage] = useState<string>('');
   const [running, setRunning] = useState<boolean>(false);
+  const [hasAnalysis, setHasAnalysis] = useState<boolean>(false);
 
+  // "Analisi disponibile" = presenza dei risultati in ORTHANC (SR statistiche), non su disco.
   const loadLatest = useCallback(() => {
     if (!uid) return;
-    fetch(`/api/studies/${uid}/latest`)
-      .then(r => (r.ok ? r.json() : null))
-      .then(d => {
-        if (d && d.status === 'done') {
-          setJobId(d.job_id);
-          setTs(Date.now());
-          setStage('done');
-        }
+    fetch(`/api/studies/${uid}/segments`)
+      .then(r => {
+        if (r.ok) { setHasAnalysis(true); setStage('done'); }
       })
       .catch(() => {});
   }, [uid]);
@@ -75,7 +70,7 @@ export default function BullseyePanel() {
       .then(j => {
         setStage(j.stage || '');
         if (j.status === 'done') {
-          setStatus(''); setJobId(id); setTs(Date.now()); setStage('done'); setRunning(false);
+          setStatus(''); setStage('done'); setRunning(false); setHasAnalysis(true);
         } else if (j.status === 'error') {
           setStatus('errore: ' + (j.error || 'sconosciuto')); setRunning(false);
         } else {
@@ -99,7 +94,6 @@ export default function BullseyePanel() {
       .catch(e => { setStatus('errore: ' + e); setRunning(false); });
   }, [uid, poll]);
 
-  const done = jobId && !status;
   return (
     <div style={{ padding: 10, color: '#e0e0e0', fontFamily: 'sans-serif', fontSize: 12 }}>
       <button
@@ -115,17 +109,17 @@ export default function BullseyePanel() {
       {(running || stage) && <ProgressSteps stage={stage} running={running} />}
       {status && !running && <div style={{ marginTop: 8, color: '#90caf9' }}>{status}</div>}
       <div style={{ marginTop: 10, color: '#9e9e9e' }}>
-        {done
-          ? 'Analisi disponibile. Bull’s eye e tabella nel pannello "Voxel T2*".'
+        {hasAnalysis
+          ? 'Analisi disponibile (da Orthanc). Bull’s eye e tabella nel pannello "Voxel T2*".'
           : 'Avvia l’analisi T2*; i risultati (bull’s eye + tabella) compaiono nel pannello "Voxel T2*".'}
       </div>
       <button
-        onClick={() => window.open(`/api/jobs/${jobId}/report`, '_blank')}
-        disabled={!done}
+        onClick={() => window.open(`/api/studies/${uid}/report`, '_blank')}
+        disabled={!hasAnalysis}
         style={{
           width: '100%', marginTop: 10, padding: '8px', border: 'none', borderRadius: 6,
-          cursor: done ? 'pointer' : 'default', color: '#fff', fontWeight: 600,
-          background: done ? '#37474f' : '#2b3238',
+          cursor: hasAnalysis ? 'pointer' : 'default', color: '#fff', fontWeight: 600,
+          background: hasAnalysis ? '#37474f' : '#2b3238',
         }}
       >
         Apri referto PDF
