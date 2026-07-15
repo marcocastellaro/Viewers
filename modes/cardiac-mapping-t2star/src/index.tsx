@@ -246,6 +246,7 @@ function modeFactory({ modeConfiguration }) {
               // pannello PET dynamic-volume rimosso (crashava): lista serie standard
               leftPanels: [ohif.leftPanel],
               leftPanelResizable: true,
+              leftPanelClosed: true, // lista serie nascosta di default (riapribile dall'utente)
               // pannelli: segmentazione (opacita'/visibilita'), bull's eye, voxel
               rightPanels: [
                 '@ohif/extension-cornerstone.panelModule.panelSegmentation',
