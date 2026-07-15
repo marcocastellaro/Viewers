@@ -59,8 +59,9 @@ export default function BullseyePanel() {
       .catch(e => setStatus('errore: ' + e));
   }, [uid, poll]);
 
+  const done = jobId && !status;
   return (
-    <div style={{ padding: 10, color: '#e0e0e0', fontFamily: 'sans-serif' }}>
+    <div style={{ padding: 10, color: '#e0e0e0', fontFamily: 'sans-serif', fontSize: 12 }}>
       <button
         onClick={analyze}
         style={{
@@ -70,19 +71,23 @@ export default function BullseyePanel() {
       >
         Analizza T2*
       </button>
-      {status && <div style={{ marginTop: 8, color: '#90caf9', fontSize: 12 }}>{status}</div>}
-      <div style={{ marginTop: 12, fontSize: 12, color: '#9e9e9e' }}>Bull's eye T2* (corretto)</div>
-      {jobId ? (
-        <img
-          src={`/api/jobs/${jobId}/bullseye?t=${ts}`}
-          alt="bull's eye T2*"
-          style={{ width: '100%', marginTop: 6, background: '#000', borderRadius: 4 }}
-        />
-      ) : (
-        <div style={{ marginTop: 6, fontSize: 12, color: '#777' }}>
-          Nessuna analisi ancora. Premi "Analizza T2*".
-        </div>
-      )}
+      {status && <div style={{ marginTop: 8, color: '#90caf9' }}>{status}</div>}
+      <div style={{ marginTop: 10, color: '#9e9e9e' }}>
+        {done
+          ? 'Analisi disponibile. Bull’s eye e tabella nel pannello "Voxel T2*".'
+          : 'Avvia l’analisi T2*; i risultati (bull’s eye + tabella) compaiono nel pannello "Voxel T2*".'}
+      </div>
+      <button
+        onClick={() => window.open(`/api/jobs/${jobId}/report`, '_blank')}
+        disabled={!done}
+        style={{
+          width: '100%', marginTop: 10, padding: '8px', border: 'none', borderRadius: 6,
+          cursor: done ? 'pointer' : 'default', color: '#fff', fontWeight: 600,
+          background: done ? '#37474f' : '#2b3238',
+        }}
+      >
+        Apri referto PDF
+      </button>
     </div>
   );
 }

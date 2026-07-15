@@ -7,8 +7,8 @@ function getPanelModule() {
     {
       name: 'cardiomapBullseye',
       iconName: 'tab-patient-info',
-      iconLabel: "Bull's eye",
-      label: "Bull's eye T2*",
+      iconLabel: 'Analisi',
+      label: 'Analisi T2*',
       component: () => <BullseyePanel />,
     },
     {
