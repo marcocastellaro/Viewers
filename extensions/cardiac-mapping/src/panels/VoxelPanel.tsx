@@ -21,6 +21,30 @@ const cross = (a: number[], b: number[]) => [
 ];
 const dot = (a: number[], b: number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
+// Scala colori clinica T2* (ms), coerente col bullseye PNG del backend:
+// rosso <10 -> arancio 20 -> giallo 30 -> verde >=30 (normale).
+const _hex = (h: string) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+const _lerp = (a: number[], b: number[], t: number) =>
+  `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * t)).join(',')})`;
+const _STOPS: [number, string][] = [[0, '#e53935'], [10, '#e53935'], [20, '#fb8c00'], [30, '#fdd835']];
+function t2starColor(v: number | null): string {
+  if (v == null || !isFinite(v)) return '#616161';
+  if (v >= 30) return '#43a047';
+  let a = _STOPS[0], b = _STOPS[_STOPS.length - 1];
+  for (let i = 0; i < _STOPS.length - 1; i++) {
+    if (v >= _STOPS[i][0] && v <= _STOPS[i + 1][0]) { a = _STOPS[i]; b = _STOPS[i + 1]; break; }
+  }
+  const t = (v - a[0]) / ((b[0] - a[0]) || 1);
+  return _lerp(_hex(a[1]), _hex(b[1]), t);
+}
+
+// Geometria AHA-16: seg -> [r_in, r_out, theta0_deg, theta1_deg] (0=destra, CCW, y in alto).
+const _GEOM: Record<number, [number, number, number, number]> = {
+  1: [2, 3, 60, 120], 2: [2, 3, 120, 180], 3: [2, 3, 180, 240], 4: [2, 3, 240, 300], 5: [2, 3, 300, 360], 6: [2, 3, 0, 60],
+  7: [1, 2, 60, 120], 8: [1, 2, 120, 180], 9: [1, 2, 180, 240], 10: [1, 2, 240, 300], 11: [1, 2, 300, 360], 12: [1, 2, 0, 60],
+  13: [0, 1, 45, 135], 14: [0, 1, 135, 225], 15: [0, 1, 225, 315], 16: [0, 1, 315, 405],
+};
+
 function findT2starDisplaySet(displaySetService: any) {
   const dss = displaySetService?.getActiveDisplaySets?.() || [];
   return dss.find(
@@ -139,6 +163,87 @@ async function readSegment(
   return { sample: { te, mean, sd, fit: fitT2star(te, mean), segIdx, label: labelOf(segIdx), nVox } };
 }
 
+// Calcola T2* medio per TUTTI i 16 segmenti (per il bullseye live), su tutte le slice.
+async function computeAllSegments(
+  cs: any,
+  t2ds: any,
+  segId: string
+): Promise<Record<number, { t2star: number | null; n: number }>> {
+  const segUtils = cs.cornerstoneTools.utilities.segmentation;
+  const labelVol = segUtils.getOrCreateSegmentationVolume(segId);
+  if (!labelVol) return {};
+  const [nx, ny, nz] = labelVol.dimensions;
+  const vm = labelVol.voxelManager;
+  const metas = echoMetas(t2ds, cs.cornerstone.metaData);
+  const acc: Record<number, { te: number[]; sums: number[]; n: number }> = {};
+  for (let k = 0; k < nz; k++) {
+    const worldC = labelVol.imageData.indexToWorld([Math.floor(nx / 2), Math.floor(ny / 2), k]);
+    const slice = pickSlice(metas, Array.from(worldC) as number[]);
+    if (!slice) continue;
+    const cols = slice[0].cols;
+    const imgs = await Promise.all(slice.map((m: Slice) => cs.cornerstone.imageLoader.loadAndCacheImage(m.id)));
+    const pds = imgs.map((img: any) => img.getPixelData());
+    const te = slice.map((m: Slice) => m.te);
+    for (let j = 0; j < ny; j++) {
+      for (let i = 0; i < nx; i++) {
+        const s = vm.getAtIJK(i, j, k);
+        if (s >= 1 && s <= 16) {
+          if (!acc[s]) acc[s] = { te, sums: te.map(() => 0), n: 0 };
+          const off = j * cols + i;
+          for (let e = 0; e < pds.length; e++) acc[s].sums[e] += Number(pds[e][off]);
+          acc[s].n++;
+        }
+      }
+    }
+  }
+  const out: Record<number, { t2star: number | null; n: number }> = {};
+  for (let s = 1; s <= 16; s++) {
+    const a = acc[s];
+    if (!a || !a.n) { out[s] = { t2star: null, n: 0 }; continue; }
+    const fit = fitT2star(a.te, a.sums.map(x => x / a.n));
+    out[s] = { t2star: fit ? fit.t2star : null, n: a.n };
+  }
+  return out;
+}
+
+// --- Bullseye SVG (settori anulari campionati a poligono) ---
+function _sectorPath(ri: number, ro: number, t0: number, t1: number, samples = 18): string {
+  const p = (r: number, a: number): [number, number] => {
+    const rad = (a * Math.PI) / 180;
+    return [r * Math.cos(rad), -r * Math.sin(rad)];
+  };
+  const pts: string[] = [];
+  for (let s = 0; s <= samples; s++) { const [x, y] = p(ro, t0 + ((t1 - t0) * s) / samples); pts.push(`${x.toFixed(3)},${y.toFixed(3)}`); }
+  if (ri > 0) {
+    for (let s = samples; s >= 0; s--) { const [x, y] = p(ri, t0 + ((t1 - t0) * s) / samples); pts.push(`${x.toFixed(3)},${y.toFixed(3)}`); }
+  } else { pts.push('0,0'); }
+  return 'M' + pts.join(' L') + ' Z';
+}
+function _labelPos(ri: number, ro: number, t0: number, t1: number): [number, number] {
+  const r = ri === 0 ? 0.55 : (ri + ro) / 2;
+  const a = (((t0 + t1) / 2) * Math.PI) / 180;
+  return [r * Math.cos(a), -r * Math.sin(a)];
+}
+function Bullseye({ seg }: { seg: Record<number, { t2star: number | null; n: number }> }) {
+  return (
+    <svg width="100%" viewBox="-3.4 -3.4 6.8 6.8" style={{ background: '#111', borderRadius: 4, marginTop: 8, maxHeight: 300 }}>
+      {Object.entries(_GEOM).map(([k, g]) => {
+        const s = +k;
+        const v = seg[s]?.t2star ?? null;
+        const [lx, ly] = _labelPos(g[0], g[1], g[2], g[3]);
+        return (
+          <g key={k}>
+            <path d={_sectorPath(g[0], g[1], g[2], g[3])} fill={t2starColor(v)} stroke="#222" strokeWidth={0.02} />
+            <text x={lx} y={ly} fontSize={0.24} fill="#000" textAnchor="middle" dominantBaseline="middle">
+              {v == null ? 'N/D' : v.toFixed(0)}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 function DecayPlot({ sample }: { sample: Sample }) {
   const W = 264, H = 156, ml = 34, mr = 8, mt = 8, mb = 22;
   const { te, mean, sd, fit } = sample;
@@ -194,6 +299,26 @@ export default function VoxelPanel() {
   const [active, setActive] = useState(false);
   const [sample, setSample] = useState<Sample | null>(null);
   const [status, setStatus] = useState<string>('');
+  const [bullseye, setBullseye] = useState<Record<number, { t2star: number | null; n: number }> | null>(null);
+  const [computing, setComputing] = useState(false);
+
+  const computeBullseye = useCallback(async () => {
+    if (!cs) return;
+    const t2ds = findT2starDisplaySet(displaySetService);
+    const segs = segmentationService?.getSegmentations?.() || [];
+    if (!t2ds || !segs.length) { setStatus('serie T2* o segmentazione mancante'); return; }
+    setComputing(true);
+    setStatus('calcolo bullseye…');
+    try {
+      const res = await computeAllSegments(cs, t2ds, segs[0].segmentationId);
+      setBullseye(res);
+      setStatus('');
+    } catch (e: any) {
+      setStatus('errore bullseye: ' + (e?.message || e));
+    } finally {
+      setComputing(false);
+    }
+  }, [cs, displaySetService, segmentationService]);
 
   const setActiveTool = useCallback(
     (tool: 'WindowLevel' | 'Probe') => {
@@ -268,7 +393,24 @@ export default function VoxelPanel() {
       >
         {active ? 'Selezione attiva — clic su un segmento' : 'Seleziona segmento'}
       </button>
+      <button
+        onClick={computeBullseye}
+        disabled={computing}
+        style={{
+          width: '100%', marginTop: 8, padding: '9px', border: 'none', borderRadius: 6,
+          cursor: computing ? 'default' : 'pointer', fontWeight: 600, color: '#fff',
+          background: computing ? '#455a64' : '#37474f',
+        }}
+      >
+        {computing ? 'Calcolo…' : 'Bullseye T2* (live)'}
+      </button>
       {status && <div style={{ marginTop: 8, color: status.includes('FUORI') ? '#e57373' : '#90caf9' }}>{status}</div>}
+      {bullseye && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ color: '#9e9e9e' }}>Bullseye T2* (media per segmento, ms) — rosso &lt;10 · verde ≥30</div>
+          <Bullseye seg={bullseye} />
+        </div>
+      )}
       {sample && (
         <div style={{ marginTop: 10 }}>
           <div style={{ color: '#ffb74d', fontWeight: 600 }}>{sample.label}</div>
