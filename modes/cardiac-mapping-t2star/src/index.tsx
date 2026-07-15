@@ -141,14 +141,21 @@ function modeFactory({ modeConfiguration }) {
         cornerstoneViewportService.getViewportIds().forEach(vpId => {
           const vp = cornerstoneViewportService.getCornerstoneViewport(vpId);
           try {
-            const volumeIds = (vp?.getActors?.() || [])
-              .map(a => a.uid)
-              .filter(Boolean);
-            if (volumeIds.length) {
-              volumeIds.forEach(volId =>
-                vp.setProperties({ interpolationType: csEnums.InterpolationType.NEAREST }, volId)
-              );
-            } else {
+            const actors = vp?.getActors?.() || [];
+            actors.forEach((entry: any) => {
+              // 1) via API cornerstone (per-volume)
+              if (entry?.uid) {
+                try {
+                  vp.setProperties({ interpolationType: csEnums.InterpolationType.NEAREST }, entry.uid);
+                } catch (e) { /* */ }
+              }
+              // 2) diretto sul vtkVolumeProperty (robusto per i layer in fusione):
+              //    l'interpolazione lineare sul myo map mascherato creava un bordo sfumato.
+              try {
+                entry?.actor?.getProperty?.().setInterpolationTypeToNearest?.();
+              } catch (e) { /* actor non-volume */ }
+            });
+            if (!actors.length) {
               vp?.setProperties?.({ interpolationType: csEnums.InterpolationType.NEAREST });
             }
             vp?.render?.();

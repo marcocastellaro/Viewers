@@ -78,11 +78,8 @@ const cardiacMappingT2star = {
               id: 'mapSelector',
               options: { voi: { windowCenter: 40, windowWidth: 80 } },
             },
-            // LAYER 2 (foreground): mappa del miocardio a colori (inferno). Rampa di opacita'
-            // con SOGLIA piu' alta di default (~10 ms): i voxel a T2* basso (rim rumoroso ai
-            // bordi del miocardio) restano trasparenti -> niente effetto "due cerchi concentrici".
-            // value e' normalizzato sul VOI (windowCenter 40, windowWidth 80 -> 0..80 ms):
-            // 0.125 ~ 10 ms, 0.175 ~ 14 ms.
+            // LAYER 2 (foreground): mappa del miocardio a colori (inferno), trasparente solo
+            // fuori dal miocardio (value 0 -> opacity 0). Nessuna soglia sui valori bassi.
             {
               id: 'myoMapSelector',
               options: {
@@ -91,8 +88,7 @@ const cardiacMappingT2star = {
                   name: 'Inferno (matplotlib)',
                   opacity: [
                     { value: 0, opacity: 0 },
-                    { value: 0.125, opacity: 0 },
-                    { value: 0.175, opacity: 1 },
+                    { value: 0.02, opacity: 1 },
                     { value: 1, opacity: 1 },
                   ],
                 },
