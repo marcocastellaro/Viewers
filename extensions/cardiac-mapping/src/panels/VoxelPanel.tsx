@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSystem } from '@ohif/core/src';
+import { getActiveSource } from '../activeSource';
 
 // Pannello CardioMap (riquadro 4). Due parti:
 //  1) Selezione segmento: clic su un voxel DENTRO la segmentazione -> curva media +-SD dei 10
@@ -232,10 +233,15 @@ export default function VoxelPanel() {
   const [statsMsg, setStatsMsg] = useState<string>('');
 
   const fetchStats = useCallback(() => {
-    const uid = studyUID();
-    if (!uid) return;
+    // scope sulla serie T2* SORGENTE attiva -> mostra i valori di QUELLA sequenza (piu' sequenze
+    // multi-echo per studio hanno risultati separati). Fallback: studio (retro-compat).
+    const src = getActiveSource(servicesManager);
+    const url = src
+      ? `/api/studies/${encodeURIComponent(src.study)}/segments?source_series=${encodeURIComponent(src.series)}`
+      : (studyUID() ? `/api/studies/${studyUID()}/segments` : null);
+    if (!url) return;
     setStatsMsg('caricamento valori analisi…');
-    fetch(`/api/studies/${uid}/segments`)
+    fetch(url)
       .then(r => (r.ok ? r.json() : Promise.reject(r.status)))
       .then(d => {
         const perSeg: Record<number, SegStat> = {};
@@ -243,10 +249,25 @@ export default function VoxelPanel() {
         setStats({ perSeg, septum: d.aggregates.septum_mid, global: d.aggregates.global });
         setStatsMsg('');
       })
-      .catch(() => { setStats(null); setStatsMsg('nessuna analisi disponibile — esegui "Analizza T2*"'); });
-  }, []);
+      .catch(() => { setStats(null); setStatsMsg('nessuna analisi per questa serie — esegui "Analizza T2*"'); });
+  }, [servicesManager]);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
+
+  // ricarica i valori quando l'utente cambia serie/viewport (risultati di un'altra sequenza)
+  useEffect(() => {
+    const { viewportGridService, displaySetService } = servicesManager?.services || {};
+    const subs: any[] = [];
+    try {
+      const vg = viewportGridService;
+      [vg?.EVENTS?.ACTIVE_VIEWPORT_ID_CHANGED, vg?.EVENTS?.GRID_STATE_CHANGED]
+        .filter(Boolean).forEach((ev: string) => subs.push(vg.subscribe(ev, fetchStats)));
+      const ds = displaySetService;
+      [ds?.EVENTS?.DISPLAY_SETS_ADDED, ds?.EVENTS?.DISPLAY_SETS_CHANGED]
+        .filter(Boolean).forEach((ev: string) => subs.push(ds.subscribe(ev, fetchStats)));
+    } catch (e) { /* */ }
+    return () => subs.forEach(s => s?.unsubscribe?.());
+  }, [servicesManager, fetchStats]);
 
   const setActiveTool = useCallback((tool: 'WindowLevel' | 'Probe') => {
     const { toolGroupService, viewportGridService } = servicesManager.services;
