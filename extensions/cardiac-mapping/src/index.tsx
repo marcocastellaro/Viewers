@@ -36,6 +36,19 @@ function makeAnalyzeCommand(servicesManager) {
       notify('Nessuno studio aperto', 'error');
       return;
     }
+    // Idempotenza: se un'analisi esiste gia' (statistiche in Orthanc), rifarla SOVRASCRIVE la
+    // precedente -> chiedi conferma prima di procedere.
+    try {
+      const existing = await fetch(`/api/studies/${uid}/segments`);
+      if (existing.ok && !window.confirm(
+        'Esiste gia\' un\'analisi per questo studio.\n\n' +
+        'Rifarla SOVRASCRIVE i risultati precedenti (mappe, segmentazione, referto e statistiche).\n\n' +
+        'Procedere?')) {
+        return;
+      }
+    } catch (e) {
+      /* se il controllo fallisce (rete), si procede comunque con l'analisi */
+    }
     notify('Avvio analisi T2*…', 'info');
     try {
       const res = await fetch('/api/analyze', {

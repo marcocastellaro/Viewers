@@ -73,6 +73,13 @@ export default function BullseyePanel() {
 
   const analyze = useCallback(() => {
     if (!uid) { setStatus('nessuno studio aperto'); return; }
+    // Idempotenza: se un'analisi esiste gia', rifarla SOVRASCRIVE la precedente -> conferma.
+    if (hasAnalysis && !window.confirm(
+      'Esiste gia\' un\'analisi per questo studio.\n\n' +
+      'Rifarla SOVRASCRIVE i risultati precedenti (mappe, segmentazione, referto e statistiche).\n\n' +
+      'Procedere?')) {
+      return;
+    }
     setStatus('');
     fetch('/api/analyze', {
       method: 'POST',
@@ -82,7 +89,7 @@ export default function BullseyePanel() {
       .then(r => r.json())
       .then(j => (j.job_id ? analysisTracker.start(uid, j.job_id) : setStatus('risposta inattesa')))
       .catch(e => setStatus('errore: ' + e));
-  }, [uid]);
+  }, [uid, hasAnalysis]);
 
   return (
     <div style={{ padding: 10, color: '#e0e0e0', fontFamily: 'sans-serif', fontSize: 12 }}>
