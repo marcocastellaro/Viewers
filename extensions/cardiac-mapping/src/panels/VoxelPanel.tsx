@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSystem } from '@ohif/core/src';
-import { getActiveSource } from '../activeSource';
+import { getActiveSource, getSourceDisplaySet } from '../activeSource';
 
 // Pannello CardioMap (riquadro 4). Due parti:
 //  1) Selezione segmento: clic su un voxel DENTRO la segmentazione -> curva media +-SD dei 10
@@ -292,7 +292,9 @@ export default function VoxelPanel() {
         st.getAllAnnotations().forEach((a: any) => { if (a?.metadata?.toolName === 'Probe' && a.annotationUID !== ann.annotationUID) st.removeAnnotation(a.annotationUID); });
         cs.cornerstone.getRenderingEngines?.().forEach((re: any) => re.render());
       } catch (e) { /* best-effort */ }
-      const t2ds = findT2starDisplaySet(displaySetService);
+      // stessa serie sorgente (viewport 1) usata per le statistiche -> nessun conflitto col
+      // viewport 2 (mappa). Fallback al vecchio criterio se non disponibile.
+      const t2ds = getSourceDisplaySet(servicesManager) || findT2starDisplaySet(displaySetService);
       if (!t2ds) { setStatus('serie T2* multi-echo non trovata'); return; }
       const segs = segmentationService?.getSegmentations?.() || [];
       if (!segs.length) { setStatus('segmentazione non caricata'); return; }
