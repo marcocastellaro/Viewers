@@ -20,6 +20,19 @@ const callbacks = (toolName: string) => [
 
 const toolbarButtons = [
   {
+    // CardioMap: avvia l'analisi T2* (comando dell'estensione cardiac-mapping). Se un'analisi
+    // esiste gia' il comando chiede conferma di sovrascrittura (idempotenza, vedi index.tsx).
+    id: 'AnalyzeT2star',
+    uiType: 'ohif.toolButton',
+    props: {
+      icon: 'tool-cine',
+      label: i18n.t('Buttons:Analizza T2*'),
+      tooltip: i18n.t('Buttons:Avvia (o rifa) l’analisi T2* cardiaca'),
+      commands: 'analyzeT2star',
+      evaluate: 'evaluate.action',
+    },
+  },
+  {
     id: 'MeasurementTools',
     uiType: 'ohif.toolButtonList',
     props: {
