@@ -2,6 +2,10 @@ import { id } from './id';
 import getHangingProtocolModule from './getHangingProtocolModule';
 import getPanelModule from './getPanelModule';
 import { getActiveSource, checkEligible } from './activeSource';
+import { installAnalysisLock } from './analysisLock';
+
+// Lock globale del viewer durante l'analisi (overlay che blocca viewport + selezione serie).
+installAnalysisLock();
 
 // Comando nativo "Analizza T2*": analizza la serie T2* SORGENTE attiva nel viewport (non il primo
 // studio dell'URL), solo se idonea (cuore + multi-echo GRE, gate lato backend), e apre il referto

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSystem } from '@ohif/core/src';
 import { getActiveSource, getSourceDisplaySet } from '../activeSource';
+import { analysisTracker } from '../analysisTracker';
 
 // Pannello CardioMap (riquadro 4). Due parti:
 //  1) Selezione segmento: clic su un voxel DENTRO la segmentazione -> curva media +-SD dei 10
@@ -231,6 +232,12 @@ export default function VoxelPanel() {
   const [status, setStatus] = useState<string>('');
   const [stats, setStats] = useState<Stats | null>(null);
   const [statsMsg, setStatsMsg] = useState<string>('');
+  const [, forceLock] = useState(0);
+
+  // durante un'analisi in corso i controlli del pannello (selezione segmento / probe) vanno
+  // disabilitati (la serie sorgente non deve cambiare). Stato dal tracker condiviso.
+  useEffect(() => analysisTracker.subscribe(() => forceLock(n => n + 1)), []);
+  const running = analysisTracker.getState().running;
 
   const fetchStats = useCallback(() => {
     // scope sulla serie T2* SORGENTE attiva -> mostra i valori di QUELLA sequenza (piu' sequenze
@@ -314,9 +321,15 @@ export default function VoxelPanel() {
 
   return (
     <div style={{ padding: 10, color: '#e0e0e0', fontFamily: 'sans-serif', fontSize: 12, height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
-      {/* Parte 1: selezione segmento */}
-      <button onClick={toggle} style={btn(active ? '#1565c0' : '#37474f')}>
-        {active ? 'Selezione attiva — clic su un segmento' : 'Seleziona segmento'}
+      {/* Parte 1: selezione segmento (disabilitata durante un'analisi in corso) */}
+      <button
+        onClick={() => { if (!running) toggle(); }}
+        disabled={running}
+        title={running ? 'Analisi in corso: attendere' : ''}
+        style={{ ...btn(active ? '#1565c0' : '#37474f'),
+          opacity: running ? 0.5 : 1, cursor: running ? 'default' : 'pointer' }}
+      >
+        {running ? 'Analisi in corso…' : active ? 'Selezione attiva — clic su un segmento' : 'Seleziona segmento'}
       </button>
       {status && <div style={{ marginTop: 8, color: status.includes('FUORI') ? '#e57373' : '#90caf9' }}>{status}</div>}
       {curve && (
@@ -335,7 +348,7 @@ export default function VoxelPanel() {
       <div style={{ marginTop: 12, borderTop: '1px solid #333', paddingTop: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ color: '#9e9e9e' }}>Bullseye T2* — rosso &lt;10 · verde ≥30</span>
-          <button onClick={fetchStats} style={{ padding: '3px 8px', border: 'none', borderRadius: 4, cursor: 'pointer', color: '#fff', background: '#37474f', fontSize: 11 }}>Aggiorna</button>
+          <button onClick={() => { if (!running) fetchStats(); }} disabled={running} style={{ padding: '3px 8px', border: 'none', borderRadius: 4, cursor: running ? 'default' : 'pointer', color: '#fff', background: '#37474f', fontSize: 11, opacity: running ? 0.5 : 1 }}>Aggiorna</button>
         </div>
         {stats ? (
           <>
