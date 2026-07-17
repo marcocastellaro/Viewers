@@ -197,7 +197,11 @@ function modeFactory({ modeConfiguration }) {
       // A fine analisi ricarica la vista, cosi' l'hanging protocol carica le serie appena
       // create in Orthanc (mappe + SEG). Il reload e' affidabile; i risultati (bull's eye,
       // tabella, referto) restano perche' sono in Orthanc. Notifica breve prima del reload.
-      const onAnalysisDone = () => {
+      // MULTI-STUDIO: se il soggetto ha piu' studi (timepoint) caricati, si porta lo studio
+      // ANALIZZATO in testa a StudyInstanceUIDs -> diventa lo studio ATTIVO dopo il reload, cosi'
+      // l'HP mostra il timepoint CORRETTO (non il primo/precedente).
+      const onAnalysisDone = (evt: any) => {
+        const analyzed = evt?.detail?.study;
         try {
           uiNotificationService?.show?.({
             title: 'Cardiac Mapping',
@@ -207,7 +211,17 @@ function modeFactory({ modeConfiguration }) {
           });
         } catch (e) { /* */ }
         setTimeout(() => {
-          try { window.location.reload(); } catch (e) { /* */ }
+          try {
+            const url = new URL(window.location.href);
+            const list = (url.searchParams.get('StudyInstanceUIDs') || '').split(',').filter(Boolean);
+            if (analyzed && list.length > 1 && list.includes(analyzed) && list[0] !== analyzed) {
+              url.searchParams.set('StudyInstanceUIDs',
+                [analyzed, ...list.filter(s => s !== analyzed)].join(','));
+              window.location.href = url.toString();  // navigazione -> reload con studio giusto attivo
+              return;
+            }
+          } catch (e) { /* */ }
+          window.location.reload();
         }, 1500);
       };
       window.addEventListener('cardiomap:analysis-done', onAnalysisDone);
