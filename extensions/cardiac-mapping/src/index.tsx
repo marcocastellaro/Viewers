@@ -7,6 +7,9 @@ import { installAnalysisLock } from './analysisLock';
 // Lock globale del viewer durante l'analisi (overlay che blocca viewport + selezione serie).
 installAnalysisLock();
 
+// Sync del viewport mappa/SEG quando cambia la serie T2* sorgente nel viewport 1 (usato dal mode).
+export { installMapSync } from './syncMapViewport';
+
 // Comando nativo "Analizza T2*": analizza la serie T2* SORGENTE attiva nel viewport (non il primo
 // studio dell'URL), solo se idonea (cuore + multi-echo GRE, gate lato backend), e apre il referto
 // LEGATO a quella serie. Risultati separati per sequenza (scoped via source_series).

@@ -1,4 +1,5 @@
 import { Enums as csEnums } from '@cornerstonejs/core';
+import { installMapSync } from '@cardiomap/extension-cardiac-mapping';
 import { id } from './id';
 import initWorkflowSteps from './initWorkflowSteps';
 import initToolGroups from './initToolGroups';
@@ -226,6 +227,11 @@ function modeFactory({ modeConfiguration }) {
       };
       window.addEventListener('cardiomap:analysis-done', onAnalysisDone);
       (servicesManager as any)._cardiomapOnDone = onAnalysisDone; // per rimozione in onModeExit
+
+      // COERENZA al cambio serie: se l'utente carica un'altra T2* multi-echo nel viewport 1, il
+      // viewport 2 (mappa+SEG) si aggancia ai risultati di QUELLA sorgente (i valori dei pannelli
+      // si aggiornano gia' da soli, scoped). Cleanup in onModeExit.
+      (servicesManager as any)._cardiomapMapSync = installMapSync(servicesManager);
     },
     onSetupRouteComplete: () => {
       // CardioMap: niente workflow-steps PET (forzavano l'HP default4D). Usiamo il nostro HP.
@@ -241,6 +247,10 @@ function modeFactory({ modeConfiguration }) {
       const onDone = (servicesManager as any)._cardiomapOnDone;
       if (onDone) {
         window.removeEventListener('cardiomap:analysis-done', onDone);
+      }
+      const mapSyncCleanup = (servicesManager as any)._cardiomapMapSync;
+      if (typeof mapSyncCleanup === 'function') {
+        mapSyncCleanup();
       }
 
       toolGroupService.destroy();
