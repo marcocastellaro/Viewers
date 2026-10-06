@@ -46,7 +46,7 @@ const dicomPmap = {
 function modeFactory({ modeConfiguration }) {
   return {
     id,
-    routeName: 'cardiac-mapping-t2star',
+    routeName: 'cardiac-mapping',
     displayName: 'CMR-QMapping',
     onModeEnter: function ({ servicesManager, extensionManager, commandsManager }: withAppTypes) {
       const {
@@ -296,7 +296,7 @@ function modeFactory({ modeConfiguration }) {
      */
     routes: [
       {
-        path: 'cardiac-mapping-t2star',
+        path: 'cardiac-mapping',
         layoutTemplate: ({ location, servicesManager }) => {
           return {
             id: ohif.layout,
