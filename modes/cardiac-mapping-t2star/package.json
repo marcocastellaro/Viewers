@@ -1,7 +1,7 @@
 {
   "name": "@cardiomap/mode-cardiac-mapping-t2star",
   "version": "0.1.0",
-  "description": "Quantitative Mapping - T2* e T1 MOLLI (CardioMap)",
+  "description": "CMR-QMapping - quantitative mapping CMR: T2* e T1 MOLLI (CardioMap)",
   "author": "CardioMap",
   "license": "MIT",
   "repository": "OHIF/Viewers",

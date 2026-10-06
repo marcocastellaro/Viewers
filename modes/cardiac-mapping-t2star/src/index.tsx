@@ -47,7 +47,7 @@ function modeFactory({ modeConfiguration }) {
   return {
     id,
     routeName: 'cardiac-mapping-t2star',
-    displayName: 'Quantitative Mapping',
+    displayName: 'CMR-QMapping',
     onModeEnter: function ({ servicesManager, extensionManager, commandsManager }: withAppTypes) {
       const {
         measurementService,
@@ -207,7 +207,7 @@ function modeFactory({ modeConfiguration }) {
         const analyzed = evt?.detail?.study;
         try {
           uiNotificationService?.show?.({
-            title: 'Quantitative Mapping',
+            title: 'CMR-QMapping',
             message: 'Analisi completata: aggiorno la vista…',
             type: 'success',
             duration: 2500,

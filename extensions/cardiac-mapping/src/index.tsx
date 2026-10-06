@@ -20,7 +20,7 @@ export { rememberActiveSource, installSourceRestore } from './restoreSource';
 function makeAnalyzeCommand(servicesManager) {
   const { uiNotificationService } = servicesManager.services;
   const notify = (message, type = 'info') =>
-    uiNotificationService.show({ title: 'Quantitative Mapping', message, type, duration: 5000 });
+    uiNotificationService.show({ title: 'CMR-QMapping', message, type, duration: 5000 });
 
   const poll = (jobId, src, m) =>
     fetch(`/api/jobs/${jobId}`)
