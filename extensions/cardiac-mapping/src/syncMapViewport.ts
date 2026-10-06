@@ -1,15 +1,21 @@
-// Coerenza multi-serie/multi-studio: quando l'utente carica manualmente una serie T2* multi-echo
-// nel VIEWPORT 1, il VIEWPORT 2 (mappa T2* + overlay colore + SEG) e i valori dei pannelli devono
+// Coerenza multi-serie/multi-studio: quando l'utente carica manualmente una serie sorgente (T2*
+// multi-echo o T1 MOLLI) nel VIEWPORT 1, il VIEWPORT 2 (mappa + overlay colore + SEG) e i valori
+// dei pannelli devono
 // aggiornarsi alla sequenza selezionata, "come se fosse appena analizzata".
 // I pannelli si aggiornano gia' da soli (letture scoped su source_series). Qui aggiorniamo il
 // viewport 2 impostando i display set CardioMap che appartengono alla serie sorgente attiva
-// (stesso studio + suffisso [T2* s<num> #token] nella SeriesDescription), con le stesse opzioni
-// dell'hanging protocol (VOI + colormap Inferno + SEG).
+// (stesso studio + suffisso [T2* s<num> #token] / [T1 s<num> #token] nella SeriesDescription), con
+// le stesse opzioni dell'hanging protocol (VOI + colormap Inferno + SEG).
 
-import { getSourceDisplaySet } from './activeSource';
+import { getSourceDisplaySet, modalityLabel } from './activeSource';
 
-// stesse opzioni dei layer del viewport 2 nell'hanging protocol (getHangingProtocolModule.ts)
-const MAP_VOI = { windowCenter: 40, windowWidth: 80 };
+// Opzioni dei layer del viewport 2 per modalita'. T2*: come l'hanging protocol
+// (getHangingProtocolModule.ts). T1 nativo: base 0..1500 ms, overlay miocardio 700..1400 ms.
+const LAYERS: Record<string, { name: string; baseVoi: any; myoVoi: any }> = {
+  t2star: { name: 'T2map', baseVoi: { windowCenter: 40, windowWidth: 80 }, myoVoi: { windowCenter: 40, windowWidth: 80 } },
+  t1_molli: { name: 'T1map', baseVoi: { windowCenter: 750, windowWidth: 1500 }, myoVoi: { windowCenter: 1050, windowWidth: 700 } },
+};
+const MOLLI_RE = /molli|t1[ _-]?map|myomaps/i;
 const MYO_COLORMAP = {
   name: 'Inferno (matplotlib)',
   opacity: [
@@ -37,11 +43,14 @@ export function installMapSync(servicesManager: any): () => void {
     lastSeries = src.SeriesInstanceUID;
 
     const study = src.StudyInstanceUID;
-    const tag = `[T2* s${src.SeriesNumber} #`; // suffisso della serie sorgente (studio univoco)
+    const modality = MOLLI_RE.test(desc(src)) ? 't1_molli' : 't2star';
+    const L = LAYERS[modality];
+    // suffisso della serie sorgente (studio univoco): "[T2* s21 #" oppure "[T1 s16 #"
+    const tag = `[${modalityLabel(modality)} s${src.SeriesNumber} #`;
     const all = displaySetService.getActiveDisplaySets?.() || [];
     const inStudy = (ds: any) => ds?.StudyInstanceUID === study && desc(ds).includes(tag);
-    const mapFull = all.find((ds: any) => inStudy(ds) && desc(ds).startsWith('CardioMap T2map full'));
-    const myoMap = all.find((ds: any) => inStudy(ds) && desc(ds).startsWith('CardioMap T2map myo'));
+    const mapFull = all.find((ds: any) => inStudy(ds) && desc(ds).startsWith(`CardioMap ${L.name} full`));
+    const myoMap = all.find((ds: any) => inStudy(ds) && desc(ds).startsWith(`CardioMap ${L.name} myo`));
     const seg = all.find((ds: any) => inStudy(ds) && ds.Modality === 'SEG');
 
     // secondo viewport (viewport 2 = mappa/SEG)
@@ -54,8 +63,8 @@ export function installMapSync(servicesManager: any): () => void {
     let opts: any[];
     if (mapFull) {
       uids = [mapFull.displaySetInstanceUID];
-      opts = [{ options: { voi: MAP_VOI } }];
-      if (myoMap) { uids.push(myoMap.displaySetInstanceUID); opts.push({ options: { voi: MAP_VOI, colormap: MYO_COLORMAP } }); }
+      opts = [{ options: { voi: L.baseVoi } }];
+      if (myoMap) { uids.push(myoMap.displaySetInstanceUID); opts.push({ options: { voi: L.myoVoi, colormap: MYO_COLORMAP } }); }
       if (seg) { uids.push(seg.displaySetInstanceUID); opts.push({}); }
     } else {
       // nessuna analisi per QUESTA serie: niente mappa stantia -> mostra la sorgente (coerente col

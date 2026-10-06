@@ -8,14 +8,14 @@ function getPanelModule() {
       name: 'cardiomapBullseye',
       iconName: 'tab-patient-info',
       iconLabel: 'Analisi',
-      label: 'Analisi T2*',
+      label: 'Analisi (T2* / T1)',
       component: () => <BullseyePanel />,
     },
     {
       name: 'cardiomapVoxel',
       iconName: 'tab-patient-info',
       iconLabel: 'Voxel',
-      label: 'Voxel T2*',
+      label: 'Voxel (T2* / T1)',
       component: (props: any) => <VoxelPanel {...props} />,
     },
   ];

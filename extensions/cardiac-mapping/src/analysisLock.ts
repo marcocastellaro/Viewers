@@ -1,10 +1,11 @@
-// Lock globale del viewer durante un'analisi T2*: mentre un job e' in corso, un overlay a schermo
+// Lock globale del viewer durante un'analisi (T2* o T1): mentre un job e' in corso, un overlay a schermo
 // intero intercetta tutti gli eventi puntatore -> blocca l'interazione con i VIEWPORT e con la
 // LISTA SERIE (selezione di altre sequenze). Serve a garantire che la serie SORGENTE non cambi
 // durante l'analisi. Vive fuori da React (agganciato al singleton analysisTracker), cosi' e'
 // attivo qualunque pannello sia montato. Mostra lo stato con spinner + barra di progresso.
 
 import { analysisTracker } from './analysisTracker';
+import { modalityLabel } from './activeSource';
 
 // stage backend -> percentuale target (durate indicative: segmentazione e' lo stage piu' lungo).
 const STAGE_PCT: Record<string, number> = {
@@ -13,7 +14,7 @@ const STAGE_PCT: Record<string, number> = {
 };
 const STAGE_LABEL: Record<string, string> = {
   download: 'Scaricamento studio', ingest: 'Preparazione dati', segmentation: 'Segmentazione',
-  mapping: 'Quantificazione T2*', aggregation: 'Statistiche per segmento', report: 'Referto',
+  mapping: 'Quantificazione', aggregation: 'Statistiche per segmento', report: 'Referto',
   writeback: 'Salvataggio risultati', done: 'Completato',
 };
 
@@ -85,13 +86,15 @@ function ensureOverlay(): HTMLDivElement {
 }
 
 function update(): void {
-  const { running, stage } = analysisTracker.getState();
+  const { running, stage, modality } = analysisTracker.getState();
   const el = ensureOverlay();
   if (running) {
     el.style.display = 'flex';
     const pct = STAGE_PCT[stage] ?? 4;                  // 4% di partenza finche' lo stage non arriva
     if (fill) fill.style.width = Math.max(4, pct) + '%';
-    if (label) label.textContent = 'Analisi T2* — ' + (STAGE_LABEL[stage] || 'in corso') + '…';
+    const m = modalityLabel(modality);
+    const lbl = stage === 'mapping' ? 'Quantificazione ' + m : (STAGE_LABEL[stage] || 'in corso');
+    if (label) label.textContent = 'Analisi ' + m + ' — ' + lbl + '…';
   } else {
     el.style.display = 'none';
     if (fill) fill.style.width = '0%';

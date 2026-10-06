@@ -1,19 +1,30 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useSystem } from '@ohif/core/src';
 import { analysisTracker } from '../analysisTracker';
-import { getActiveSource, checkEligible } from '../activeSource';
+import { getActiveSource, checkEligible, modalityLabel } from '../activeSource';
 
 // Step della pipeline (informativi, sola lettura) e mappatura dagli stage del backend.
-const STEPS = ['Segmentazione', 'Quantificazione T2*', 'Correzione', 'Statistica / referto'];
-const STAGE_TO_IDX: Record<string, number> = {
+// T2*: segmentazione -> fit -> correzione -> statistica. T1: fit (la segmentazione T1 lavora sulla
+// mappa, quindi il fit viene PRIMA) -> segmentazione -> statistica (nessuna correzione).
+const STEPS_T2: string[] = ['Segmentazione', 'Quantificazione T2*', 'Correzione', 'Statistica / referto'];
+const STAGE_TO_IDX_T2: Record<string, number> = {
   download: 0, ingest: 0, segmentation: 0,
   mapping: 1,
   aggregation: 2,
   report: 3, writeback: 3,
 };
+const STEPS_T1: string[] = ['Quantificazione T1 (fit MOLLI)', 'Segmentazione (mappa T1)', 'Statistica / referto'];
+const STAGE_TO_IDX_T1: Record<string, number> = {
+  download: 0, ingest: 0, mapping: 0,
+  segmentation: 1,
+  aggregation: 2, report: 2, writeback: 2,
+};
 
 // Indicatore passivo di avanzamento pipeline (NON navigabile): mostra a che punto e' l'analisi.
-function ProgressSteps({ stage, running }: { stage: string; running: boolean }) {
+function ProgressSteps({ stage, running, modality }: { stage: string; running: boolean; modality: string }) {
+  const t1 = modality === 't1_molli';
+  const STEPS = t1 ? STEPS_T1 : STEPS_T2;
+  const STAGE_TO_IDX = t1 ? STAGE_TO_IDX_T1 : STAGE_TO_IDX_T2;
   const done = stage === 'done';
   const cur = done ? STEPS.length : (STAGE_TO_IDX[stage] ?? -1);
   return (
@@ -41,14 +52,15 @@ function ProgressSteps({ stage, running }: { stage: string; running: boolean }) 
   );
 }
 
-// Pannello Analisi: pulsante "Analizza T2*" + indicatore avanzamento pipeline.
+// Pannello Analisi: pulsante "Analizza T2*" / "Analizza T1" (secondo la serie nel viewport 1,
+// modalita' decisa dal backend) + indicatore avanzamento pipeline.
 // Lo stato dell'analisi vive nel tracker condiviso (analysisTracker): non si perde cambiando
 // pannello e riprende un job in corso al rientro.
 export default function BullseyePanel() {
   const { servicesManager } = useSystem();
   const [status, setStatus] = useState<string>('');
   const [hasAnalysis, setHasAnalysis] = useState<boolean>(false);
-  const [eligible, setEligible] = useState<{ eligible: boolean; reason?: string }>({ eligible: false });
+  const [eligible, setEligible] = useState<{ eligible: boolean; reason?: string; modality?: string | null }>({ eligible: false });
   const [, force] = useState(0);
 
   // Serie T2* SORGENTE attiva nel viewport (studio+serie): si analizza QUELLA, non il primo
@@ -77,6 +89,9 @@ export default function BullseyePanel() {
   const ts = analysisTracker.getState();
   const running = ts.running && ts.study === study;
   const stage = ts.study === study ? ts.stage : '';
+  // modalita': quella del job in corso, altrimenti quella decisa dal backend per la serie attiva
+  const modality = running ? ts.modality : (eligible.modality || src?.modality || 't2star');
+  const m = modalityLabel(modality);
 
   useEffect(() => { if (study) analysisTracker.resume(study); }, [study]);
 
@@ -98,11 +113,14 @@ export default function BullseyePanel() {
   }, [src?.study, src?.series, stage]);
 
   const analyze = useCallback(() => {
-    if (!src) { setStatus('seleziona nel viewport una serie T2*'); return; }
-    if (!eligible.eligible) { setStatus('serie non analizzabile: ' + (eligible.reason || 'non idonea')); return; }
+    if (!src) { setStatus('carica nel viewport 1 una serie T2* multi-echo o T1 MOLLI'); return; }
+    if (!eligible.eligible || !eligible.modality) {
+      setStatus('serie non analizzabile: ' + (eligible.reason || 'non idonea')); return;
+    }
+    const mod = eligible.modality;
     // Idempotenza (scoped per serie): rifarla SOVRASCRIVE solo i risultati di QUESTA sequenza.
     if (hasAnalysis && !window.confirm(
-      'Esiste gia\' un\'analisi per QUESTA serie T2*.\n\n' +
+      'Esiste gia\' un\'analisi per QUESTA serie ' + modalityLabel(mod) + '.\n\n' +
       'Rifarla SOVRASCRIVE i risultati di questa sequenza (le altre restano intatte).\n\n' +
       'Procedere?')) {
       return;
@@ -111,10 +129,10 @@ export default function BullseyePanel() {
     fetch('/api/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ study_instance_uid: src.study, series_overrides: { t2star: src.series } }),
+      body: JSON.stringify({ study_instance_uid: src.study, series_overrides: { [mod]: src.series }, modality: mod }),
     })
       .then(r => r.json())
-      .then(j => (j.job_id ? analysisTracker.start(src.study, j.job_id) : setStatus('risposta inattesa')))
+      .then(j => (j.job_id ? analysisTracker.start(src.study, j.job_id, mod) : setStatus('risposta inattesa')))
       .catch(e => setStatus('errore: ' + e));
   }, [src?.study, src?.series, eligible, hasAnalysis]);
 
@@ -128,26 +146,26 @@ export default function BullseyePanel() {
       <button
         onClick={analyze}
         disabled={!canAnalyze}
-        title={!src ? 'Seleziona una serie T2* nel viewport'
+        title={!src ? 'Carica nel viewport 1 una serie T2* o T1 MOLLI'
           : !eligible.eligible ? ('Non analizzabile: ' + (eligible.reason || '')) : ''}
         style={{
           width: '100%', padding: '10px', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600,
           background: !canAnalyze ? '#455a64' : '#1565c0', cursor: canAnalyze ? 'pointer' : 'default',
         }}
       >
-        {running ? 'Analisi in corso…' : 'Analizza T2*'}
+        {running ? 'Analisi ' + m + ' in corso…' : 'Analizza ' + m}
       </button>
       {src && !eligible.eligible && !running && (
         <div style={{ marginTop: 6, color: '#ef9a9a' }}>
-          Serie non analizzabile: {eligible.reason || 'non idonea'} (serve T2* cardiaca multi-echo).
+          Serie non analizzabile: {eligible.reason || 'non idonea'} (serve T2* cardiaca multi-echo o T1 MOLLI).
         </div>
       )}
-      {(running || stage) && <ProgressSteps stage={stage} running={running} />}
+      {(running || stage) && <ProgressSteps stage={stage} running={running} modality={modality} />}
       {status && !running && <div style={{ marginTop: 8, color: '#90caf9' }}>{status}</div>}
       <div style={{ marginTop: 10, color: '#9e9e9e' }}>
         {hasAnalysis
-          ? 'Analisi disponibile per questa serie (da Orthanc). Bull’s eye e tabella nel pannello "Voxel T2*".'
-          : 'Avvia l’analisi T2*; i risultati (bull’s eye + tabella) compaiono nel pannello "Voxel T2*".'}
+          ? 'Analisi ' + m + ' disponibile per questa serie (da Orthanc). Bull’s eye e tabella nel pannello "Voxel".'
+          : 'Avvia l’analisi ' + m + '; i risultati (bull’s eye + tabella) compaiono nel pannello "Voxel".'}
       </div>
       <button
         onClick={() => src && window.open(

@@ -4,9 +4,9 @@
 // Su reload/cambio tab riprende un job in corso via /api/studies/{uid}/latest.
 
 type Sub = () => void;
-type State = { jobId: string | null; stage: string; running: boolean; study: string | null };
+type State = { jobId: string | null; stage: string; running: boolean; study: string | null; modality: string };
 
-let state: State = { jobId: null, stage: '', running: false, study: null };
+let state: State = { jobId: null, stage: '', running: false, study: null, modality: 't2star' };
 const subs = new Set<Sub>();
 const emit = () => subs.forEach(s => s());
 
@@ -36,8 +36,8 @@ export const analysisTracker = {
     subs.add(fn);
     return () => { subs.delete(fn); };
   },
-  start(study: string, jobId: string): void {
-    state = { jobId, stage: 'download', running: true, study };
+  start(study: string, jobId: string, modality = 't2star'): void {
+    state = { jobId, stage: 'download', running: true, study, modality };
     emit();
     poll();
   },
@@ -48,7 +48,7 @@ export const analysisTracker = {
       .then(r => (r.ok ? r.json() : null))
       .then(d => {
         if (d && d.job_id && d.status !== 'done' && d.status !== 'error') {
-          state = { jobId: d.job_id, stage: d.stage || '', running: true, study };
+          state = { jobId: d.job_id, stage: d.stage || '', running: true, study, modality: d.modality || 't2star' };
           emit();
           poll();
         }

@@ -26,8 +26,8 @@ const toolbarButtons = [
     uiType: 'ohif.toolButton',
     props: {
       icon: 'tool-cine',
-      label: i18n.t('Buttons:Analizza T2*'),
-      tooltip: i18n.t('Buttons:Avvia (o rifa) l’analisi T2* cardiaca'),
+      label: i18n.t('Buttons:Analizza'),
+      tooltip: i18n.t('Buttons:Avvia (o rifa) l’analisi della serie nel viewport 1: T2* multi-echo o T1 MOLLI'),
       commands: 'analyzeT2star',
       evaluate: 'evaluate.action',
     },

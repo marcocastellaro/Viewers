@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSystem } from '@ohif/core/src';
-import { getActiveSource, getSourceDisplaySet } from '../activeSource';
+import { getActiveSource, getSourceDisplaySet, modalityLabel } from '../activeSource';
 import { analysisTracker } from '../analysisTracker';
 
 // Pannello CardioMap (riquadro 4). Due parti:
-//  1) Selezione segmento: clic su un voxel DENTRO la segmentazione -> curva media +-SD dei 10
-//     echi (variabilita' del segnale) del segmento; il T2* mostrato e' quello DELL'ANALISI.
+//  1) Selezione segmento: clic su un voxel DENTRO la segmentazione -> curva media +-SD del segnale
+//     del segmento (T2*: vs TE dei 10 echi, con linea di fit; T1: vs TI delle immagini MOLLI, curva
+//     di recupero senza fit). Il valore mostrato e' quello DELL'ANALISI.
 //  2) Statistiche: bullseye T2* (SVG) + tabella per-segmento, coi valori RICAVATI DALL'ANALISI
 //     (endpoint /api/studies/{uid}/segments), piu' due ROI aggregate: Mid-ventricular septum
 //     (8+9) e Global myocardium. Nessun ricalcolo lato client.
@@ -15,10 +16,23 @@ import { analysisTracker } from '../analysisTracker';
 
 type Slice = { id: string; te: number; ipp: number[]; iop: number[]; rows: number; cols: number; d: number };
 type Fit = { t2star: number; s0: number };
-type Curve = { te: number[]; mean: number[]; sd: number[]; fit: Fit | null; segIdx: number; nVox: number };
-type Stat = { t2star: number | null; sd: number; n: number };
+// te = ascissa della curva: TE (T2*) oppure TI (T1), in ms.
+type Curve = { te: number[]; mean: number[]; sd: number[]; fit: Fit | null; segIdx: number; nVox: number; xLabel: string };
+// value = valore dell'analisi (T2* corretto o T1, ms). Il backend manda 'value' (+ 't2star' per compat.).
+type Stat = { value: number | null; sd: number; n: number };
 type SegStat = Stat & { label: string };
-type Stats = { perSeg: Record<number, SegStat>; septum: Stat; global: Stat };
+type Stats = { perSeg: Record<number, SegStat>; septum: Stat; global: Stat; modality: string };
+
+// Scala colori T1 nativo (ms): viridis continua 700 -> 1400 (come il bull's eye del referto PDF).
+// Solo visualizzazione: nessuna soglia clinica (dipende da campo/sequenza; DB normativo TODO).
+const T1_MIN = 700, T1_MAX = 1400;
+const _VIRIDIS = ['#440154', '#3b528b', '#21918c', '#5ec962', '#fde725'];
+function t1Color(v: number | null): string {
+  if (v == null || !isFinite(v)) return '#616161';
+  const t = Math.min(Math.max((v - T1_MIN) / (T1_MAX - T1_MIN), 0), 1) * (_VIRIDIS.length - 1);
+  const i = Math.min(Math.floor(t), _VIRIDIS.length - 2);
+  return _lerp(_hex(_VIRIDIS[i]), _hex(_VIRIDIS[i + 1]), t - i);
+}
 
 const cross = (a: number[], b: number[]) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const dot = (a: number[], b: number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -52,17 +66,21 @@ function findT2starDisplaySet(displaySetService: any) {
     ((ds?.imageIds?.length || 0) >= 20 || (ds?.images?.length || 0) >= 20));
 }
 
-function echoMetas(ds: any, metaData: any): Slice[] {
+// xAttr: 'EchoTime' (T2*, curva di decadimento) o 'InversionTime' (T1 MOLLI, curva di recupero).
+function echoMetas(ds: any, metaData: any, xAttr = 'EchoTime'): Slice[] {
   const ids: string[] = ds?.imageIds || (ds?.images || []).map((i: any) => i.imageId);
   return (ids || []).map((id: string) => {
     const inst: any = metaData.get('instance', id) || {};
+    // MOLLI 'M-F': magnitudine e fase nella stessa serie -> solo magnitudine nella curva
+    const it = ([] as string[]).concat(inst.ImageType || []).map(x => String(x).toUpperCase());
+    if (xAttr === 'InversionTime' && it.includes('P')) return null as any;
     return {
-      id, te: Number(inst.EchoTime),
+      id, te: Number(inst[xAttr]),
       ipp: (inst.ImagePositionPatient || []).map(Number),
       iop: (inst.ImageOrientationPatient || []).map(Number),
       rows: Number(inst.Rows), cols: Number(inst.Columns), d: 0,
     } as Slice;
-  }).filter(m => m.ipp.length === 3 && m.iop.length === 6 && isFinite(m.te));
+  }).filter(m => m && m.ipp.length === 3 && m.iop.length === 6 && isFinite(m.te));
 }
 
 function pickSlice(metas: Slice[], world: number[]): Slice[] | null {
@@ -92,7 +110,7 @@ function fitMeanDecay(te: number[], sig: number[]): Fit | null {
 }
 
 // Clic: individua il segmento e ricava la curva media +-SD del segnale (per il grafico).
-async function readCurve(world: number[], cs: any, t2ds: any, segId: string): Promise<{ outside?: boolean; curve?: Curve } | null> {
+async function readCurve(world: number[], cs: any, t2ds: any, segId: string, t1 = false): Promise<{ outside?: boolean; curve?: Curve } | null> {
   const segUtils = cs.cornerstoneTools.utilities.segmentation;
   const labelVol = segUtils.getOrCreateSegmentationVolume(segId);
   if (!labelVol) return null;
@@ -102,7 +120,7 @@ async function readCurve(world: number[], cs: any, t2ds: any, segId: string): Pr
   const ci = Math.round(idx[0]), cj = Math.round(idx[1]), k = Math.round(idx[2]);
   const segIdx = vm.getAtIJK(ci, cj, k);
   if (!segIdx || segIdx < 1) return { outside: true };
-  const slice = pickSlice(echoMetas(t2ds, cs.cornerstone.metaData), world);
+  const slice = pickSlice(echoMetas(t2ds, cs.cornerstone.metaData, t1 ? 'InversionTime' : 'EchoTime'), world);
   if (!slice) return null;
   const cols = slice[0].cols, rows = slice[0].rows;
   const imgs = await Promise.all(slice.map((m: Slice) => cs.cornerstone.imageLoader.loadAndCacheImage(m.id)));
@@ -116,7 +134,8 @@ async function readCurve(world: number[], cs: any, t2ds: any, segId: string): Pr
   if (!nVox) return { outside: true };
   const mean = perEcho.map(v => v.reduce((s, x) => s + x, 0) / v.length);
   const sd = perEcho.map((v, e) => { const mu = mean[e]; return Math.sqrt(v.reduce((s, x) => s + (x - mu) * (x - mu), 0) / v.length); });
-  return { curve: { te, mean, sd, fit: fitMeanDecay(te, mean), segIdx, nVox } };
+  // T1: nessun fit lato client (il T1 ufficiale e' quello dell'analisi, fit a 3 parametri)
+  return { curve: { te, mean, sd, fit: t1 ? null : fitMeanDecay(te, mean), segIdx, nVox, xLabel: t1 ? 'TI' : 'TE' } };
 }
 
 function DecayPlot({ curve }: { curve: Curve }) {
@@ -139,7 +158,7 @@ function DecayPlot({ curve }: { curve: Curve }) {
       {line.length > 0 && <path d={line.join(' ')} fill="none" stroke="#ff7043" strokeWidth={1.5} />}
       {te.map((t, i) => <circle key={'p' + i} cx={px(t)} cy={py(mean[i])} r={2.4} fill="#90caf9" />)}
       <text x={ml} y={H - 6} fill="#888" fontSize={9}>0</text>
-      <text x={W - mr} y={H - 6} fill="#888" fontSize={9} textAnchor="end">{teMax.toFixed(0)} ms (TE)</text>
+      <text x={W - mr} y={H - 6} fill="#888" fontSize={9} textAnchor="end">{teMax.toFixed(0)} ms ({curve.xLabel})</text>
       <text x={4} y={mt + 8} fill="#888" fontSize={9}>S</text>
     </svg>
   );
@@ -162,12 +181,12 @@ function Bullseye({ stats }: { stats: Stats }) {
   return (
     <svg width="100%" viewBox="-3.4 -3.4 6.8 6.8" style={{ background: '#111', borderRadius: 4, marginTop: 8, maxHeight: 300 }}>
       {Object.entries(_GEOM).map(([k, g]) => {
-        const s = +k, v = stats.perSeg[s]?.t2star ?? null;
+        const s = +k, v = stats.perSeg[s]?.value ?? null;
         const [lx, ly] = _labelPos(g[0], g[1], g[2], g[3]);
         return (
           <g key={k}>
-            <path d={_sectorPath(g[0], g[1], g[2], g[3])} fill={t2starColor(v)} stroke="#222" strokeWidth={0.02} />
-            <text x={lx} y={ly} fontSize={0.24} fill="#000" textAnchor="middle" dominantBaseline="middle">{v == null ? 'N/D' : v.toFixed(0)}</text>
+            <path d={_sectorPath(g[0], g[1], g[2], g[3])} fill={colorFor(stats.modality, v)} stroke="#222" strokeWidth={0.02} />
+            <text x={lx} y={ly} fontSize={0.24} fill={stats.modality === 't1_molli' && v != null && v < 1050 ? '#fff' : '#000'} textAnchor="middle" dominantBaseline="middle">{v == null ? 'N/D' : v.toFixed(0)}</text>
           </g>
         );
       })}
@@ -175,18 +194,19 @@ function Bullseye({ stats }: { stats: Stats }) {
   );
 }
 
-const fmt = (st: Stat | undefined) => (!st || st.t2star == null ? 'N/D' : `${st.t2star.toFixed(1)} ± ${st.sd.toFixed(1)}`);
+const colorFor = (modality: string, v: number | null) => (modality === 't1_molli' ? t1Color(v) : t2starColor(v));
+const fmt = (st: Stat | undefined) => (!st || st.value == null ? 'N/D' : `${st.value.toFixed(1)} ± ${st.sd.toFixed(1)}`);
 
 function StatsTable({ stats }: { stats: Stats }) {
   const cell: React.CSSProperties = { padding: '2px 6px', borderBottom: '1px solid #333' };
   const dot = (v: number | null | undefined) => (
-    <span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: t2starColor(v ?? null), marginRight: 5 }} />
+    <span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: colorFor(stats.modality, v ?? null), marginRight: 5 }} />
   );
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, marginTop: 6 }}>
       <thead>
         <tr style={{ color: '#9e9e9e', textAlign: 'left' }}>
-          <th style={cell}>Segmento</th><th style={{ ...cell, textAlign: 'right' }}>T2* (ms)</th><th style={{ ...cell, textAlign: 'right' }}>n</th>
+          <th style={cell}>Segmento</th><th style={{ ...cell, textAlign: 'right' }}>{modalityLabel(stats.modality)} (ms)</th><th style={{ ...cell, textAlign: 'right' }}>n</th>
         </tr>
       </thead>
       <tbody>
@@ -194,19 +214,19 @@ function StatsTable({ stats }: { stats: Stats }) {
           const st = stats.perSeg[s];
           return (
             <tr key={s}>
-              <td style={cell}>{dot(st?.t2star)}{s}. {st?.label || `seg ${s}`}</td>
+              <td style={cell}>{dot(st?.value)}{s}. {st?.label || `seg ${s}`}</td>
               <td style={{ ...cell, textAlign: 'right' }}>{fmt(st)}</td>
               <td style={{ ...cell, textAlign: 'right', color: '#9e9e9e' }}>{st?.n || 0}</td>
             </tr>
           );
         })}
         <tr style={{ fontWeight: 700, background: '#1a2733' }}>
-          <td style={cell}>{dot(stats.septum.t2star)}Mid-ventricular septum (8+9)</td>
+          <td style={cell}>{dot(stats.septum.value)}Mid-ventricular septum (8+9)</td>
           <td style={{ ...cell, textAlign: 'right' }}>{fmt(stats.septum)}</td>
           <td style={{ ...cell, textAlign: 'right', color: '#9e9e9e' }}>{stats.septum.n}</td>
         </tr>
         <tr style={{ fontWeight: 700, background: '#1a2733' }}>
-          <td style={cell}>{dot(stats.global.t2star)}Global myocardium</td>
+          <td style={cell}>{dot(stats.global.value)}Global myocardium</td>
           <td style={{ ...cell, textAlign: 'right' }}>{fmt(stats.global)}</td>
           <td style={{ ...cell, textAlign: 'right', color: '#9e9e9e' }}>{stats.global.n}</td>
         </tr>
@@ -252,11 +272,14 @@ export default function VoxelPanel() {
       .then(r => (r.ok ? r.json() : Promise.reject(r.status)))
       .then(d => {
         const perSeg: Record<number, SegStat> = {};
-        d.per_segment.forEach((x: any) => { perSeg[x.seg] = { t2star: x.t2star, sd: x.sd, n: x.n, label: x.label }; });
-        setStats({ perSeg, septum: d.aggregates.septum_mid, global: d.aggregates.global });
+        const val = (x: any) => (x?.value ?? x?.t2star ?? null);   // 'value' (nuovo) o 't2star' (SR vecchi)
+        d.per_segment.forEach((x: any) => { perSeg[x.seg] = { value: val(x), sd: x.sd, n: x.n, label: x.label }; });
+        const agg = (a: any): Stat => ({ value: val(a), sd: a?.sd ?? 0, n: a?.n ?? 0 });
+        setStats({ perSeg, septum: agg(d.aggregates.septum_mid), global: agg(d.aggregates.global),
+          modality: d.modality || src?.modality || 't2star' });
         setStatsMsg('');
       })
-      .catch(() => { setStats(null); setStatsMsg('nessuna analisi per questa serie — esegui "Analizza T2*"'); });
+      .catch(() => { setStats(null); setStatsMsg('nessuna analisi per questa serie — esegui "Analizza"'); });
   }, [servicesManager]);
 
   useEffect(() => { fetchStats(); }, [fetchStats]);
@@ -302,11 +325,12 @@ export default function VoxelPanel() {
       // stessa serie sorgente (viewport 1) usata per le statistiche -> nessun conflitto col
       // viewport 2 (mappa). Fallback al vecchio criterio se non disponibile.
       const t2ds = getSourceDisplaySet(servicesManager) || findT2starDisplaySet(displaySetService);
-      if (!t2ds) { setStatus('serie T2* multi-echo non trovata'); return; }
+      if (!t2ds) { setStatus('serie sorgente (T2* o T1 MOLLI) non trovata'); return; }
       const segs = segmentationService?.getSegmentations?.() || [];
       if (!segs.length) { setStatus('segmentazione non caricata'); return; }
       try {
-        const r = await readCurve(ann.data?.handles?.points?.[0], cs, t2ds, segs[0].segmentationId);
+        const isT1 = getActiveSource(servicesManager)?.modality === 't1_molli';
+        const r = await readCurve(ann.data?.handles?.points?.[0], cs, t2ds, segs[0].segmentationId, isT1);
         if (!r) { setStatus('lettura non riuscita'); return; }
         if (r.outside) { setCurve(null); setStatus('voxel FUORI dalla segmentazione — scegline uno dentro'); return; }
         setCurve(r.curve || null); setStatus('');
@@ -336,7 +360,7 @@ export default function VoxelPanel() {
         <div style={{ marginTop: 10 }}>
           <div style={{ color: '#ffb74d', fontWeight: 600 }}>{seg?.label || `Segmento AHA ${curve.segIdx}`}</div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
-            <span>T2* (analisi):&nbsp;<b style={{ color: '#ff8a65' }}>{fmt(seg)} ms</b></span>
+            <span>{modalityLabel(stats?.modality)} (analisi):&nbsp;<b style={{ color: '#ff8a65' }}>{fmt(seg)} ms</b></span>
             <span style={{ color: '#9e9e9e' }}>n={seg?.n ?? '—'}</span>
           </div>
           <div style={{ color: '#9e9e9e', marginTop: 2 }}>curva media ± SD del segnale (dai voxel del segmento)</div>
@@ -347,14 +371,18 @@ export default function VoxelPanel() {
       {/* Parte 2: bullseye + tabella (valori dall'analisi) */}
       <div style={{ marginTop: 12, borderTop: '1px solid #333', paddingTop: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ color: '#9e9e9e' }}>Bullseye T2* — rosso &lt;10 · verde ≥30</span>
+          <span style={{ color: '#9e9e9e' }}>{stats?.modality === 't1_molli'
+            ? `Bullseye T1 — scala ${T1_MIN}–${T1_MAX} ms`
+            : 'Bullseye T2* — rosso <10 · verde ≥30'}</span>
           <button onClick={() => { if (!running) fetchStats(); }} disabled={running} style={{ padding: '3px 8px', border: 'none', borderRadius: 4, cursor: running ? 'default' : 'pointer', color: '#fff', background: '#37474f', fontSize: 11, opacity: running ? 0.5 : 1 }}>Aggiorna</button>
         </div>
         {stats ? (
           <>
             <Bullseye stats={stats} />
             <StatsTable stats={stats} />
-            <div style={{ color: '#777', marginTop: 6, fontSize: 10 }}>T2* corretto dall'analisi (media ± SD, CV&lt;10%).</div>
+            <div style={{ color: '#777', marginTop: 6, fontSize: 10 }}>{stats.modality === 't1_molli'
+              ? 'T1 nativo dall\'analisi (fit MOLLI 3 parametri + Look-Locker, media ± SD, CV<10%; nessuna calibrazione vs scanner).'
+              : 'T2* corretto dall\'analisi (media ± SD, CV<10%).'}</div>
           </>
         ) : (
           <div style={{ marginTop: 8, color: '#90caf9' }}>{statsMsg}</div>

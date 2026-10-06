@@ -1,5 +1,7 @@
 import { Enums as csEnums } from '@cornerstonejs/core';
-import { installMapSync } from '@cardiomap/extension-cardiac-mapping';
+import {
+  installMapSync, installSourceRestore, rememberActiveSource,
+} from '@cardiomap/extension-cardiac-mapping';
 import { id } from './id';
 import initWorkflowSteps from './initWorkflowSteps';
 import initToolGroups from './initToolGroups';
@@ -211,6 +213,8 @@ function modeFactory({ modeConfiguration }) {
             duration: 2500,
           });
         } catch (e) { /* */ }
+        // la serie analizzata (es. T1 MOLLI) torna nel viewport 1 dopo il reload (non la T2* dell'HP)
+        rememberActiveSource(servicesManager);
         setTimeout(() => {
           try {
             const url = new URL(window.location.href);
@@ -232,6 +236,7 @@ function modeFactory({ modeConfiguration }) {
       // viewport 2 (mappa+SEG) si aggancia ai risultati di QUELLA sorgente (i valori dei pannelli
       // si aggiornano gia' da soli, scoped). Cleanup in onModeExit.
       (servicesManager as any)._cardiomapMapSync = installMapSync(servicesManager);
+      (servicesManager as any)._cardiomapRestore = installSourceRestore(servicesManager);
     },
     onSetupRouteComplete: () => {
       // CardioMap: niente workflow-steps PET (forzavano l'HP default4D). Usiamo il nostro HP.
@@ -252,6 +257,10 @@ function modeFactory({ modeConfiguration }) {
       if (typeof mapSyncCleanup === 'function') {
         mapSyncCleanup();
       }
+      const restoreCleanup = (servicesManager as any)._cardiomapRestore;
+      if (typeof restoreCleanup === 'function') {
+        restoreCleanup();
+      }
 
       toolGroupService.destroy();
       syncGroupService.destroy();
@@ -269,7 +278,7 @@ function modeFactory({ modeConfiguration }) {
       const list = (modalities || '').split('\\');
       return {
         valid: list.includes('MR'),
-        description: 'Disponibile per studi MR (mapping T2* multi-echo).',
+        description: 'Disponibile per studi MR (mapping T2* multi-echo e T1 MOLLI).',
       };
     },
 
