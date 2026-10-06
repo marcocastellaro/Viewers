@@ -492,6 +492,8 @@ function _mapDisplaySets(displaySets, displaySetLoadingState, thumbnailImageSrcM
         loadingProgress,
         countIcon: ds.countIcon,
         messages: ds.messages,
+        // etichette opzionali impostate da estensioni sul displaySet (vedi Thumbnail `badges`)
+        badges: ds.badges,
         StudyInstanceUID: ds.StudyInstanceUID,
         componentType,
         imageSrc: thumbnailSrc || thumbnailImageSrcMap[displaySetInstanceUID],

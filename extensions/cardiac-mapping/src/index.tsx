@@ -11,6 +11,8 @@ installAnalysisLock();
 export { installMapSync } from './syncMapViewport';
 // Ripristino della serie sorgente analizzata (T1 MOLLI o T2*) nel viewport 1 dopo il reload.
 export { rememberActiveSource, installSourceRestore } from './restoreSource';
+// Etichette T1 / T2* sulle miniature della lista serie (analisi disponibile / gia' fatta).
+export { installThumbnailBadges } from './thumbnailBadges';
 
 // Comando nativo "Analizza": analizza la serie SORGENTE nel viewport 1 (non il primo studio
 // dell'URL), solo se idonea (gate lato backend): T2* cardiaca multi-echo GRE oppure T1 MOLLI. La

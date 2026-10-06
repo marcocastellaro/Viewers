@@ -44,6 +44,7 @@ const Thumbnail = ({
   loadingProgress,
   countIcon,
   messages,
+  badges,
   isActive,
   onClick,
   onDoubleClick,
@@ -68,6 +69,39 @@ const Thumbnail = ({
   }, [imageSrc]);
 
   const shouldRenderThumbnailImage = Boolean(imageSrc && !imageLoadFailed);
+
+  // Etichette opzionali fornite dalle estensioni (es. "T1", "T2* ✓"): `badges` = lista di
+  // { label, variant: 'outline' | 'filled', tooltip }. Assenti -> nessun rendering.
+  const renderBadges = (size: 'sm' | 'md') =>
+    Array.isArray(badges) && badges.length > 0 ? (
+      <div className="flex items-center gap-[3px]" data-cy="thumbnail-badges">
+        {badges.map((b, i) => {
+          const el = (
+            <span
+              key={i}
+              data-cy="thumbnail-badge"
+              className={classnames(
+                'rounded-[3px] px-[4px] font-semibold leading-[14px]',
+                size === 'sm' ? 'text-[10px]' : 'text-[11px]',
+                b.variant === 'filled'
+                  ? 'bg-highlight text-black'
+                  : 'border-highlight text-highlight border bg-black/60'
+              )}
+            >
+              {b.label}
+            </span>
+          );
+          return b.tooltip ? (
+            <Tooltip key={i}>
+              <TooltipTrigger asChild>{el}</TooltipTrigger>
+              <TooltipContent side="right">{b.tooltip}</TooltipContent>
+            </Tooltip>
+          ) : (
+            el
+          );
+        })}
+      </div>
+    ) : null;
 
   const handleTouchEnd = e => {
     const currentTime = new Date().getTime();
@@ -121,6 +155,9 @@ const Thumbnail = ({
                 {modality}
               </div>
             </div>
+
+            {/* top left: etichette delle estensioni */}
+            <div className="absolute top-0 left-0 p-[3px]">{renderBadges('sm')}</div>
 
             {/* top right */}
             <div className="absolute top-0 right-0 flex items-center gap-[4px]">
@@ -220,6 +257,7 @@ const Thumbnail = ({
               >
                 {modality}
               </div>
+              {renderBadges('md')}
               <Tooltip>
                 <TooltipContent>{description}</TooltipContent>
                 <TooltipTrigger className="w-full overflow-hidden">
@@ -350,6 +388,13 @@ Thumbnail.propTypes = {
   numInstances: PropTypes.number.isRequired,
   loadingProgress: PropTypes.number,
   messages: PropTypes.object,
+  badges: PropTypes.arrayOf(
+    PropTypes.shape({
+      label: PropTypes.string.isRequired,
+      variant: PropTypes.oneOf(['outline', 'filled']),
+      tooltip: PropTypes.string,
+    })
+  ),
   isActive: PropTypes.bool.isRequired,
   onClick: PropTypes.func.isRequired,
   onDoubleClick: PropTypes.func.isRequired,

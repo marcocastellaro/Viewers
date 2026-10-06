@@ -1,6 +1,6 @@
 import { Enums as csEnums } from '@cornerstonejs/core';
 import {
-  installMapSync, installSourceRestore, rememberActiveSource,
+  installMapSync, installSourceRestore, installThumbnailBadges, rememberActiveSource,
 } from '@cardiomap/extension-cardiac-mapping';
 import { id } from './id';
 import initWorkflowSteps from './initWorkflowSteps';
@@ -237,6 +237,7 @@ function modeFactory({ modeConfiguration }) {
       // si aggiornano gia' da soli, scoped). Cleanup in onModeExit.
       (servicesManager as any)._cardiomapMapSync = installMapSync(servicesManager);
       (servicesManager as any)._cardiomapRestore = installSourceRestore(servicesManager);
+      (servicesManager as any)._cardiomapBadges = installThumbnailBadges(servicesManager);
     },
     onSetupRouteComplete: () => {
       // CardioMap: niente workflow-steps PET (forzavano l'HP default4D). Usiamo il nostro HP.
@@ -260,6 +261,10 @@ function modeFactory({ modeConfiguration }) {
       const restoreCleanup = (servicesManager as any)._cardiomapRestore;
       if (typeof restoreCleanup === 'function') {
         restoreCleanup();
+      }
+      const badgesCleanup = (servicesManager as any)._cardiomapBadges;
+      if (typeof badgesCleanup === 'function') {
+        badgesCleanup();
       }
 
       toolGroupService.destroy();
@@ -304,7 +309,7 @@ function modeFactory({ modeConfiguration }) {
               // pannello PET dynamic-volume rimosso (crashava): lista serie standard
               leftPanels: [ohif.leftPanel],
               leftPanelResizable: true,
-              leftPanelClosed: true, // lista serie nascosta di default (riapribile dall'utente)
+              leftPanelClosed: false, // lista serie APERTA di default: mostra le etichette T1/T2*
               // pannelli: segmentazione (opacita'/visibilita'), bull's eye, voxel
               rightPanels: [
                 '@ohif/extension-cornerstone.panelModule.panelSegmentation',
