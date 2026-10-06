@@ -47,7 +47,7 @@ function modeFactory({ modeConfiguration }) {
   return {
     id,
     routeName: 'cardiac-mapping-t2star',
-    displayName: 'Cardiac Mapping - T2star',
+    displayName: 'Quantitative Mapping',
     onModeEnter: function ({ servicesManager, extensionManager, commandsManager }: withAppTypes) {
       const {
         measurementService,
@@ -207,7 +207,7 @@ function modeFactory({ modeConfiguration }) {
         const analyzed = evt?.detail?.study;
         try {
           uiNotificationService?.show?.({
-            title: 'Cardiac Mapping',
+            title: 'Quantitative Mapping',
             message: 'Analisi completata: aggiorno la vista…',
             type: 'success',
             duration: 2500,

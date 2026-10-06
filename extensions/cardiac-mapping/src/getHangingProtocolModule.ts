@@ -14,7 +14,7 @@ const sync = [
 
 const cardiacMappingT2star = {
   id: 'cardiacMappingT2star',
-  name: 'Cardiac Mapping T2*',
+  name: 'Quantitative Mapping',
   protocolMatchingRules: [
     { id: 'hasMR', weight: 1, attribute: 'ModalitiesInStudy', constraint: { contains: 'MR' } },
   ],
