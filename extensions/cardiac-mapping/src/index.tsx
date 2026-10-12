@@ -13,6 +13,8 @@ export { installMapSync } from './syncMapViewport';
 export { rememberActiveSource, installSourceRestore } from './restoreSource';
 // Etichette T1 / T2* sulle miniature della lista serie (analisi disponibile / gia' fatta).
 export { installThumbnailBadges } from './thumbnailBadges';
+// Doppio clic su miniatura: sorgente -> viewport 1, risultati CardioMap -> viewport 2.
+export { cardiomapThumbnailDoubleClick } from './doubleClickTarget';
 
 // Comando nativo "Analizza": analizza la serie SORGENTE nel viewport 1 (non il primo studio
 // dell'URL), solo se idonea (gate lato backend): T2* cardiaca multi-echo GRE oppure T1 MOLLI. La

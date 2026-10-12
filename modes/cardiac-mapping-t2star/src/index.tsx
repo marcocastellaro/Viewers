@@ -1,6 +1,7 @@
 import { Enums as csEnums } from '@cornerstonejs/core';
 import {
-  installMapSync, installSourceRestore, installThumbnailBadges, rememberActiveSource,
+  cardiomapThumbnailDoubleClick, installMapSync, installSourceRestore, installThumbnailBadges,
+  rememberActiveSource,
 } from '@cardiomap/extension-cardiac-mapping';
 import { id } from './id';
 import initWorkflowSteps from './initWorkflowSteps';
@@ -135,6 +136,11 @@ function modeFactory({ modeConfiguration }) {
         },
         'panelSegmentation.showAddSegment': {
           $set: false,
+        },
+        // doppio clic su miniatura: niente controllo dell'HP (rifiuta il viewport 2 multi-layer);
+        // la sorgente va sempre nel viewport 1, i risultati CardioMap nel viewport 2.
+        'studyBrowser.thumbnailDoubleClickCallback': {
+          $set: { callbacks: [cardiomapThumbnailDoubleClick] },
         },
       });
 
